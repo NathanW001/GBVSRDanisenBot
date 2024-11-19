@@ -297,6 +297,10 @@ class Danisen(commands.Cog):
             await self.matchmake(ctx.interaction)
 
     def rejoin_queue(self, player):
+        if self.queue_status == False:
+            print(f"q is closed so no rejoin")
+            return
+
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player["discord_id"]} AND character='{player["character"]}'")
         player = res.fetchone()
         player = DanisenRow(player)
