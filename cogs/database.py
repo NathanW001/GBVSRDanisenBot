@@ -1,7 +1,6 @@
 import sqlite3
 import pandas
 import math
-df = pandas.read_excel('Players.xlsx')
 
 class DanisenRow(dict):
     def __repr__(self):

@@ -375,7 +375,7 @@ class Danisen(commands.Cog):
                     break
             if old_daniel:
                 #readding old daniel back into the q
-                self.dans_in_queue[old_daniel['dan']].append(old_daniel)
+                self.dans_in_queue[old_daniel['dan']].insert(0, old_daniel)
                 self.in_queue[old_daniel['player_name']][0] = True
                 print(f"we readded daniel2 {old_daniel}")
             if not matchmade:
