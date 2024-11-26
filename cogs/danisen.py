@@ -27,6 +27,8 @@ class Danisen(commands.Cog):
 
         #dict with following format player_name:[in_queue, last_played_player_name]
         self.in_queue = {}
+        #dict with following format player_name:in_match
+        self.in_match = {}
 
     @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
@@ -39,6 +41,7 @@ class Danisen(commands.Cog):
             self.max_active_matches = 3
             self.cur_active_matches = 0
             self.in_queue = {}
+            self.in_match = {}
             await ctx.respond(f"The matchmaking queue has been disabled")
         else:
             await ctx.respond(f"The matchmaking queue has been enabled")
@@ -281,6 +284,14 @@ class Danisen(commands.Cog):
             return
         self.in_queue[ctx.author.name][0] = True
 
+        #check if in a match already
+        if ctx.author.name not in self.in_match.keys():
+            print(f"added {ctx.author.name} to in_match dict")
+            self.in_match[ctx.author.name] = False
+            print(f"in_match {self.in_match}")
+        elif self.in_match[ctx.author.name]:
+            await ctx.respond(f"You are in an active match and cannot queue up")
+            return
 
         self.dans_in_queue[daniel['dan']].append(daniel)
         self.matchmaking_queue.append(daniel)
@@ -374,6 +385,8 @@ class Danisen(commands.Cog):
 
 
                     print(f"match made between {daniel1} and {daniel2}")
+                    self.in_match[daniel1['player_name']] = True
+                    self.in_match[daniel2['player_name']] = True
                     matchmade = True
                     await self.create_match_interaction(ctx, daniel1, daniel2)
                     break

@@ -36,9 +36,16 @@ class MatchSelect(discord.ui.Select):
         self.disabled=True
         self.view.disable_all_items()
         self.view.stop()
+
         print("Match has been reported")
+
         self.bot.cur_active_matches -= 1
         print(f"cur_active_matches reduced {self.bot.cur_active_matches}")
+
+        #remove players from match dict
+        self.bot.in_match[self.p1['player_name']] = False
+        self.bot.in_match[self.p2['player_name']] = False
+
         if self.values[0] == "Cancel":
             await interaction.respond(f"Match has been cancelled you will be not readded to queue")
             await interaction.message.delete()
