@@ -9,6 +9,7 @@ For the cfg file format it should be following
 ////
 
 [TOKENS]
+
 token = DISCORD_BOT_TOKEN_HERE
 
 ////
