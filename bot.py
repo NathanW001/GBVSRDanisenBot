@@ -9,7 +9,6 @@ config.read('bot.cfg')
 
 id_dict = dict(config.items('TOKENS'))
 token = id_dict['token']
-test_token = id_dict['test_token']
 
 intents = discord.Intents.default()
 intents.members = True
