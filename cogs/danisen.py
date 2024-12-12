@@ -2,7 +2,6 @@ import discord, sqlite3, asyncio
 from discord.ext import commands, pages
 from cogs.database import *
 from cogs.custom_views import *
-from obswebsocket import obsws, requests 
 class Danisen(commands.Cog):
     characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki"]
     players = ["player1", "player2"]
