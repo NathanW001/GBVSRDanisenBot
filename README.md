@@ -16,3 +16,9 @@ where you replace "DISCORD_BOT_TOKEN_HERE" with your respective token in order t
 Enter the following command into your terminal
 
 python bot.py
+
+# Notes
+
+Regarding matchmaking, the matchmaking queue will attempt to match players closest in dan, while also not matching them with the same person they previously played
+
+And for point gains we have that if there  is a 2 dan or larger gap (e.g dan 1 vs dan 3) if the higher dan player wins, no points are gained/lost, but if the lower dan wins everything works as normal (this is in order to discourage farming low ranks while also not discouraging lower ranked players from playing against higher ranked players)
