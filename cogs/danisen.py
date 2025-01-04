@@ -96,7 +96,9 @@ class Danisen(commands.Cog):
         if rankup:
             role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0]}")
             member = ctx.guild.get_member(winner['discord_id'])
-            await member.add_roles(role)
+            if role:
+                await member.add_roles(role)
+
             print(f"Dan {winner_rank[0]} added to {member.name}")
             role = self.dead_role(ctx, winner)
             if role:
@@ -170,7 +172,8 @@ class Danisen(commands.Cog):
 
         print(f"Adding Character and Dan roles to user")
         role_list.append(discord.utils.get(ctx.guild.roles, name="Dan 1"))
-        await ctx.author.add_roles(*role_list)
+        if role_list:
+            await ctx.author.add_roles(*role_list)
 
         await ctx.respond(f"""You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\nif you wish to add more characters you can register multiple times!\n\nWelcome to the Danielsen!""")
 
