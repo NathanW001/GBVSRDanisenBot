@@ -11,6 +11,8 @@ where you replace "DISCORD_BOT_TOKEN_HERE" with your respective token in order t
 (I will potentially be adding functionality for daniel to run on other servers but this is TBD)
 
 
+Also need to replace ACTIVE_MATCHES_CHANNEL_ID inside danisen.py with the respective discord channel id you want match interactions to show up in (this will be a message from the bot when a match is made between 2 players)
+
 # Running the bot
 
 Enter the following command into your terminal
