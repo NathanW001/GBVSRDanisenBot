@@ -158,20 +158,29 @@ class Danisen(commands.Cog):
         line = [ctx.author.id, player_name, char1, 1, 0]
         insert_new_player(tuple(line),self.database_cur)
         role_list = []
-        role_list.append(discord.utils.get(ctx.guild.roles, name=char1))
+        char_role = discord.utils.get(ctx.guild.roles, name=char1)
+        if char_role:
+            role_list.append(char_role)
+
         if char2:
             line[2] = char2
-            role_list.append(discord.utils.get(ctx.guild.roles, name=char2))
+            char_role=discord.utils.get(ctx.guild.roles, name=char2)
+            if char_role:
+                role_list.append(char_role)
             insert_new_player(tuple(line),self.database_cur)
         if char3:
             line[2] = char3
-            role_list.append(discord.utils.get(ctx.guild.roles, name=char3))
+            char_role=discord.utils.get(ctx.guild.roles, name=char3)
+            if char_role:
+                role_list.append(char_role)
             insert_new_player(tuple(line),self.database_cur)
         print(f"Adding to db {player_name} {char1} {char2} {char3}")
         self.database_con.commit()
 
         print(f"Adding Character and Dan roles to user")
-        role_list.append(discord.utils.get(ctx.guild.roles, name="Dan 1"))
+        dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
+        if dan_role:
+            role_list.append(dan_role)
         if role_list:
             await ctx.author.add_roles(*role_list)
 
@@ -199,8 +208,8 @@ class Danisen(commands.Cog):
         if role:
             role_list.append(role)
             
-
-        await ctx.author.remove_roles(*role_list)
+        if role_list:
+            await ctx.author.remove_roles(*role_list)
 
         await ctx.respond(f"""You have now unregistered {char1}""")
 
