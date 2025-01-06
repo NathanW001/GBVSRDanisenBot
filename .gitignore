@@ -1,10 +1,4 @@
-bot.cfg
+config.json
 danisen.db
-test_danisen.db
-__pycache__/database.cpython-312.pyc
-Players.xlsx
-cogs/__pycache__/danisen.cpython-312.pyc
-cogs/__pycache__/database.cpython-312.pyc
-.vscode/settings.json
-cogs/__pycache__/custom_views.cpython-312.pyc
-logs
+.vscode/*
+*.pyc

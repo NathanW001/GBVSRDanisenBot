@@ -5,15 +5,32 @@ from cogs.custom_views import *
 class Danisen(commands.Cog):
     characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki"]
     players = ["player1", "player2"]
-    dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.yellow(), discord.Colour.orange(),
-                   discord.Colour.dark_green(), discord.Colour.purple(), discord.Colour.blue(), discord.Colour.from_rgb(120,63,4)]
-    total_dans = 7
-    ACTIVE_MATCHES_CHANNEL_ID = 1295577883879931937
-    queue_status = True
+    dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.from_rgb(255,255,0), discord.Colour.from_rgb(255,153,0),
+                   discord.Colour.from_rgb(39, 78, 19), discord.Colour.from_rgb(97,0,162), discord.Colour.from_rgb(0,0,177), discord.Colour.from_rgb(120,63,4),
+                   #SPECIAL RANKS
+                   discord.Colour.from_rgb(0,0,255), discord.Colour.from_rgb(120,63,4), discord.Colour.from_rgb(255,0,0), discord.Colour.from_rgb(152,0,0), discord.Colour.from_rgb(0,0,0)
+                   ]
 
-    def __init__(self, bot, database):
+    def __init__(self, bot, database, config):
         self.bot = bot
         self._last_member = None
+
+        ###################################################
+        #SET ALL CONFIG VALUES 
+
+        self.ACTIVE_MATCHES_CHANNEL_ID = config['ACTIVE_MATCHES_CHANNEL_ID']
+        self.total_dans = config['total_dans']
+        #cannot rank down if ur dan is <= minimum_derank
+        self.minimum_derank = config['minimum_derank']
+        #if your rank difference is greater  than maximum rank diff you can no points (e.g. max diff of 2, and rank 4 vs  rank 1)
+        self.maximum_rank_difference = config['maximum_rank_difference']
+        #if point_rollover is enabled then if we have a dan1 with 2 points, that gains 2 points, they will be (dan 2, 1 point) after
+        #without rollover they are only (dan 2, 0 points)
+        self.point_rollover = config['point_rollover']
+        self.queue_status = config['queue_status']
+
+        ###################################################
+
         self.database_con = database
         self.database_con.row_factory = sqlite3.Row
         self.database_cur = self.database_con.cursor()
@@ -63,25 +80,41 @@ class Danisen(commands.Cog):
 
         rankdown = False
         rankup = False
-        if winner_rank[0] >= loser_rank[0] + 2:
-            return winner_rank, loser_rank
-        if winner_rank[0] >= loser_rank[0]:
-            winner_rank[1] += 1
-            if loser_rank[0] != 1 or loser_rank[1] != 0:
-                loser_rank[1] -= 1
-        else:
-            winner_rank[1] += 2
-            if loser_rank[0] != 1 or loser_rank[1] != 0:
-                loser_rank[1] -= 1
 
+        #winning if you are more than the maximum_rank_difference you gain nothing
+        if winner_rank[0] > loser_rank[0] + self.maximum_rank_difference:
+            return winner_rank, loser_rank
+
+        if winner_rank[0] >= loser_rank[0]:
+            #higher ranked player gains 1 point at most
+            winner_rank[1] += 1
+        else:
+            #lower ranked player gains 2 points
+            winner_rank[1] += 2
+
+        #minimum rank has different rules to clamp the points lost e.g. (min for dan1 is (dan 1, 0 point), min for other dans is -2 pts)
+        if loser_rank[0] > self.minimum_derank:
+            loser_rank[1] -= 1
+        #point loss for dan1 (minimum is 0 points)
+        elif loser_rank[0] == 1 and loser_rank[1] > 0:
+            loser_rank[1] -= 1
+        #point loss for 1 < dan < minimum_derank (minimum is -2 points)
+        elif loser_rank[1] > -2:
+            loser_rank[1] -= 1
+
+        #rankup logic (normal ranks promote at +3)
         if winner_rank[1] >= 3:
             winner_rank[0] += 1
-            winner_rank[1] = winner_rank[1] % 3
+            if self.point_rollover:
+                winner_rank[1] = winner_rank[1] % 3
+            else:
+                winner_rank[1] = 0
             rankup = True
 
+        #rankdown logic (normal ranks demote at -3)
         if loser_rank[1] <= -3:
             loser_rank[0] -= 1
-            loser_rank[1] = loser_rank[1] % 3
+            loser_rank[1] = 0
             rankdown = True
 
         print("New Scores")
@@ -473,7 +506,7 @@ class Danisen(commands.Cog):
 
     @discord.commands.slash_command(description="See players in a specific dan")
     async def dan(self, ctx : discord.ApplicationContext,
-                  dan : discord.Option(int, min_value=1, max_value=total_dans)):
+                  dan : discord.Option(int, min_value=1, max_value=12)):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE dan={dan}")
         daniels = res.fetchall()
         page_list = []

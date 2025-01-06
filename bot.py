@@ -1,25 +1,27 @@
 import discord
-import configparser
 import sqlite3
-from functools import cache
 from cogs.danisen import *
+import json
+import os
 
-config = configparser.RawConfigParser()
-config.read('bot.cfg')
+def create_bot():
+    try:
+        if os.path.exists("config.json"):
+            with open("config.json", 'r') as f:
+                config = json.load(f)
+    except Exception as e:
+        print("Warning", f"Failed to load configuration: {str(e)}")
 
-id_dict = dict(config.items('TOKENS'))
-token = id_dict['token']
+    intents = discord.Intents.default()
+    intents.members = True
 
-intents = discord.Intents.default()
-intents.members = True
+    bot = discord.Bot(intents=intents)
+    con = sqlite3.connect("danisen.db")
 
-bot = discord.Bot(intents=intents)
-con = sqlite3.connect("danisen.db")
+    bot.add_cog(Danisen(bot,con,config))
 
-bot.add_cog(Danisen(bot,con))
-
-@bot.event
-async def on_ready():
-    print(f'We have logged in as {bot.user}')
-
-bot.run(token)
+    @bot.event
+    async def on_ready():
+        print(f'We have logged in as {bot.user}')
+    
+    return bot
