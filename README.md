@@ -8,20 +8,15 @@ git clone https://github.com/dlotfi2/DanisenBot
 
 
 # DanisenBot setup
-In order to make the bot functional for yourself you need to add your bot token to the bot.cfg file
+In order to make the bot functional for yourself you need to add your bot token and ACTIVE_MATCHES_CHANNEL_ID to the config.json file
 
-where you replace "DISCORD_BOT_TOKEN_HERE" with your respective token in order to host the bot.
-
-(I will potentially be adding functionality for daniel to run on other servers but this is TBD)
-
-
-Also need to replace ACTIVE_MATCHES_CHANNEL_ID inside danisen.py with the respective discord channel id you want match interactions to show up in (this will be a message from the bot when a match is made between 2 players)
+This can be done in the gui, or by editing the file manually
 
 # Running the bot
 
 Enter the following command into your terminal
 
-python bot.py
+python gui.py
 
 # Notes
 
