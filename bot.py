@@ -5,12 +5,7 @@ import json
 import os
 
 def create_bot():
-    try:
-        if os.path.exists("config.json"):
-            with open("config.json", 'r') as f:
-                config = json.load(f)
-    except Exception as e:
-        print("Warning", f"Failed to load configuration: {str(e)}")
+    config_path = "config.json"
 
     intents = discord.Intents.default()
     intents.members = True
@@ -18,10 +13,14 @@ def create_bot():
     bot = discord.Bot(intents=intents)
     con = sqlite3.connect("danisen.db")
 
-    bot.add_cog(Danisen(bot,con,config))
+    bot.add_cog(Danisen(bot,con,config_path))
 
     @bot.event
     async def on_ready():
         print(f'We have logged in as {bot.user}')
     
     return bot
+
+def update_bot_config(bot):
+    danisen = bot.get_cog("Danisen")
+    danisen.update_config()

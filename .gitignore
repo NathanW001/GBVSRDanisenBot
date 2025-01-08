@@ -2,3 +2,6 @@ config.json
 danisen.db
 .vscode/*
 *.pyc
+build/*
+gui.spec
+dist/gui.exe

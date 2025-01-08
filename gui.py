@@ -7,6 +7,16 @@ import json
 import os
 import qasync
 
+default_config_dict = {
+    "bot_token": "",
+    "ACTIVE_MATCHES_CHANNEL_ID": "",
+    "total_dans": 7,
+    "minimum_derank": 2,
+    "maximum_rank_difference": 1,
+    "point_rollover": True,
+    "queue_status": True
+}
+
 class MainTab(QWidget):
     def __init__(self, bot):
         super().__init__()
@@ -14,7 +24,7 @@ class MainTab(QWidget):
         layout = QVBoxLayout(self)
 
         # Create status label to show current state
-        self.status_label = QLabel("Current State: Stopped")
+        self.status_label = QLabel("Current State: Stopped\n(Make sure you have a valid token in the config!)")
         layout.addWidget(self.status_label)
 
         #Add Main Content
@@ -59,9 +69,10 @@ class MainTab(QWidget):
 
 
 class ConfigTab(QWidget):
-    def __init__(self):
+    def __init__(self, bot):
         super().__init__()
 
+        self.bot = bot
         layout = QVBoxLayout(self)
         self.config_form_layout = QFormLayout()
 
@@ -154,6 +165,8 @@ class ConfigTab(QWidget):
             config = self.get_config_dict()
             with open(self.settings_file, 'w') as f:
                 json.dump(config, f, indent=4)
+
+            update_bot_config(self.bot)
             QMessageBox.information(self, "Success", "Configuration saved successfully!")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save configuration: {str(e)}")
@@ -173,9 +186,16 @@ class DanisenWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        #Create config file if non-existant
+        self.settings_file = "config.json"
+        try:
+            with open(self.settings_file, 'x') as f:
+                json.dump(default_config_dict, f, indent=4)
+        except FileExistsError:
+            print(f"The file '{self.settings_file}' already exists")
+
         #Creating DanisenBot
         self.bot = create_bot()
-        self.settings_file = "config.json"
 
         self.setWindowTitle("Danisen Bot")
         self.setMinimumSize(600, 400)
@@ -191,7 +211,7 @@ class DanisenWindow(QMainWindow):
 
         # Add Tabs
         tabs.addTab(MainTab(self.bot), "Main")
-        tabs.addTab(ConfigTab(), "Config")
+        tabs.addTab(ConfigTab(self.bot), "Config")
         #TODO tabs.addTab(self.create_logs_tab(), "Logs")
 
         layout.addWidget(tabs)

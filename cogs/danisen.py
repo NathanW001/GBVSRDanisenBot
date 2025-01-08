@@ -2,6 +2,7 @@ import discord, sqlite3, asyncio
 from discord.ext import commands, pages
 from cogs.database import *
 from cogs.custom_views import *
+import os
 class Danisen(commands.Cog):
     characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki"]
     players = ["player1", "player2"]
@@ -11,9 +12,36 @@ class Danisen(commands.Cog):
                    discord.Colour.from_rgb(0,0,255), discord.Colour.from_rgb(120,63,4), discord.Colour.from_rgb(255,0,0), discord.Colour.from_rgb(152,0,0), discord.Colour.from_rgb(0,0,0)
                    ]
 
-    def __init__(self, bot, database, config):
+    def __init__(self, bot, database, config_path):
         self.bot = bot
         self._last_member = None
+
+        self.config_path = config_path
+        self.update_config()
+
+        self.database_con = database
+        self.database_con.row_factory = sqlite3.Row
+        self.database_cur = self.database_con.cursor()
+        self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points,   PRIMARY KEY (discord_id, character) )")
+
+        self.dans_in_queue = {dan:[] for dan in range(1,self.total_dans+1)}
+        self.matchmaking_queue = []
+        self.max_active_matches = 3
+        self.cur_active_matches = 0
+
+        #dict with following format player_name:[in_queue, last_played_player_name]
+        self.in_queue = {}
+        #dict with following format player_name:in_match
+        self.in_match = {}
+
+    def update_config(self):
+
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    config = json.load(f)
+        except Exception as e:
+            print("Warning", f"Failed to load configuration: {str(e)}")
 
         ###################################################
         #SET ALL CONFIG VALUES 
@@ -30,21 +58,6 @@ class Danisen(commands.Cog):
         self.queue_status = config['queue_status']
 
         ###################################################
-
-        self.database_con = database
-        self.database_con.row_factory = sqlite3.Row
-        self.database_cur = self.database_con.cursor()
-        self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points,   PRIMARY KEY (discord_id, character) )")
-
-        self.dans_in_queue = {dan:[] for dan in range(1,self.total_dans+1)}
-        self.matchmaking_queue = []
-        self.max_active_matches = 3
-        self.cur_active_matches = 0
-
-        #dict with following format player_name:[in_queue, last_played_player_name]
-        self.in_queue = {}
-        #dict with following format player_name:in_match
-        self.in_match = {}
 
     @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
