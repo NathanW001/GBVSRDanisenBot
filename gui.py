@@ -6,6 +6,7 @@ import sys
 import json
 import os
 import qasync
+from io import StringIO
 
 default_config_dict = {
     "bot_token": "",
@@ -182,6 +183,56 @@ class ConfigTab(QWidget):
             QMessageBox.warning(self, "Warning", f"Failed to load configuration: {str(e)}")
 
 
+class OutputRedirector(StringIO):
+    def __init__(self, text_widget, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.text_widget = text_widget
+
+    def write(self, text):
+        super().write(text)
+        self.text_widget.append(text.rstrip())
+
+class LogTab(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        layout = QVBoxLayout(self)
+        self.config_form_layout = QFormLayout()
+
+        # Create text display
+        self.text_display = QTextEdit()
+        self.text_display.setReadOnly(True)
+        layout.addWidget(self.text_display)
+
+        self.stdout_redirector = OutputRedirector(self.text_display)
+        sys.stdout = self.stdout_redirector
+
+        # Store original stdout for cleanup
+        self.original_stdout = sys.__stdout__
+
+        #Add Main Content
+        self.save_logs_button = QPushButton(text="Save Logs")
+        self.save_logs_button.clicked.connect(self.save_logs)
+
+        layout.addWidget(self.save_logs_button)
+    
+    def save_logs(self):
+        text = self.text_display.toPlainText()
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Output",
+            "",
+            "Text Files (*.txt);;All Files (*)"
+        )
+
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as file:
+                    file.write(text)
+                print(f"Output saved to {file_path}")
+            except Exception as e:
+                print(f"Error saving file: {str(e)}")
 class DanisenWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -212,11 +263,13 @@ class DanisenWindow(QMainWindow):
         # Add Tabs
         tabs.addTab(MainTab(self.bot), "Main")
         tabs.addTab(ConfigTab(self.bot), "Config")
+        tabs.addTab(LogTab(), "Logs")
         #TODO tabs.addTab(self.create_logs_tab(), "Logs")
 
         layout.addWidget(tabs)
 
-
+        icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        self.setWindowIcon(icon)
 
 
 def main():
