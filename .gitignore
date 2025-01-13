@@ -4,4 +4,4 @@ danisen.db
 *.pyc
 build/*
 gui.spec
-dist/gui.exe
+*.exe
