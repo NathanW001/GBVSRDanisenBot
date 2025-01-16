@@ -3,9 +3,9 @@ This bot uses Pycord and not Discord.py to clarify (these packages have the same
 
 (Note if you already have discord.py installed you will need to uninstall it in order for pycord to work)
 
+# RUNNING BOT THROUGH PY FILE
 # Installation
 git clone https://github.com/dlotfi2/DanisenBot
-
 
 # DanisenBot setup
 In order to make the bot functional for yourself you need to add your bot token and ACTIVE_MATCHES_CHANNEL_ID to the config.json file
@@ -17,6 +17,31 @@ This can be done in the gui, or by editing the file manually
 Enter the following command into your terminal
 
 python gui.py
+
+
+# RUNNING THROUGH GUI
+Basic functional release of the bot as an exe,
+
+
+First Create Your Bot:
+- Create a Bot using the discord dev portal https://discord.com/developers/applications
+- Save your bot token somewhere
+- Invite your bot to your server with the following permissions
+![firefox_HsUjlQfpO2](https://github.com/user-attachments/assets/de93b627-a109-4361-b528-cc26361ad703)
+![firefox_DAfBkhvL0G](https://github.com/user-attachments/assets/0eede925-cf92-4458-bf8c-c340721d4948)
+![firefox_8JicCP8Vkp](https://github.com/user-attachments/assets/1c1a694d-5f50-42d0-a04d-e36e827bdb4a)
+
+Pick a channel id in your server where you want the bot to post messages
+![Discord_1uMsu0beLJ](https://github.com/user-attachments/assets/3bed0f6a-97ae-48e6-8a8c-dcddd648eda7)
+
+Running the bot:
+- Place DanisenBot.exe inside its own folder
+- Run the exe file
+- Go to the Config Tab and put in the relevant fields (DISCORD BOT TOKEN AND CHANNEL ID!!!) (VERY IMPORTANT)
+- Save the configuration
+
+After you've done the above you can press the start button!
+
 
 # Notes
 
