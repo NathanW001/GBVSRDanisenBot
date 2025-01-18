@@ -3,5 +3,6 @@
 .vscode/*
 *.pyc
 build/*
-gui.spec
+*.spec
 *.exe
+*.log
