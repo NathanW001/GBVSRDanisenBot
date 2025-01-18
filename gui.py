@@ -220,6 +220,9 @@ class LogTab(QWidget):
         self.stdout_redirector = OutputRedirector(self.text_display)
         sys.stdout = self.stdout_redirector
 
+        self.stderr_redirector = OutputRedirector(self.text_display)
+        sys.stderr = self.stderr_redirector
+
         # Store original stdout for cleanup
         self.original_stdout = sys.__stdout__
 
