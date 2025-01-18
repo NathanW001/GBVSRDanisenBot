@@ -108,11 +108,8 @@ class Danisen(commands.Cog):
         #minimum rank has different rules to clamp the points lost e.g. (min for dan1 is (dan 1, 0 point), min for other dans is -2 pts)
         if loser_rank[0] > self.minimum_derank:
             loser_rank[1] -= 1
-        #point loss for dan1 (minimum is 0 points)
-        elif loser_rank[0] == 1 and loser_rank[1] > 0:
-            loser_rank[1] -= 1
-        #point loss for 1 < dan < minimum_derank (minimum is -2 points)
-        elif loser_rank[1] > -2:
+        #point loss for minimum dans is capped at 0 min (minimum is 0 points)
+        elif loser_rank[1] > 0:
             loser_rank[1] -= 1
 
         #rankup logic (normal ranks promote at +3)

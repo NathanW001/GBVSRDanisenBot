@@ -7,6 +7,19 @@ import json
 import os
 import qasync
 from io import StringIO
+import logging
+
+logging.basicConfig(
+    filename='error.log',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+sys.excepthook = handle_exception
+
 
 default_config_dict = {
     "bot_token": "",

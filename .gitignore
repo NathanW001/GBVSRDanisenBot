@@ -1,5 +1,5 @@
-config.json
-danisen.db
+*.json
+*.db
 .vscode/*
 *.pyc
 build/*
