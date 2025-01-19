@@ -21,6 +21,21 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = handle_exception
 
+# Create a logger for stderr
+stderr_logger = logging.getLogger('stderr')
+stderr_logger.setLevel(logging.DEBUG)
+
+
+# Create our custom stderr that redirects to logging
+class LoggedStderr:
+    def write(self, msg):
+        if msg.strip():  # Only log non-empty messages
+            stderr_logger.error(msg)
+    
+    def flush(self):
+        pass
+
+sys.stderr = LoggedStderr()
 
 default_config_dict = {
     "bot_token": "",

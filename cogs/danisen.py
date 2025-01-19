@@ -38,6 +38,12 @@ class Danisen(commands.Cog):
         #dict with following format player_name:in_match
         self.in_match = {}
 
+    def can_manage_role(self, bot_member, role):
+        # Check if bot's highest role is higher than the role to be added
+        return (
+            bot_member.top_role.position > role.position and 
+            bot_member.guild_permissions.manage_roles
+        )
     def update_config(self):
 
         try:
@@ -143,13 +149,20 @@ class Danisen(commands.Cog):
         if rankup:
             role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0]}")
             member = ctx.guild.get_member(winner['discord_id'])
+            bot_member = ctx.guild.get_member(self.bot.user.id)
             if role:
-                await member.add_roles(role)
+                if self.can_manage_role(bot_member,role):
+                    await member.add_roles(role)
+                else:
+                    self.logger.warning(f"Could not add {role} to {member.name} due to bot's role being too low")
 
             self.logger.info(f"Dan {winner_rank[0]} added to {member.name}")
             role = self.dead_role(ctx, winner)
             if role:
-                await member.remove_roles(role)
+                if self.can_manage_role(bot_member,role):
+                    await member.remove_roles(role)
+                else:
+                    self.logger.warning(f"Could not remove {role} to {member.name} due to bot's role being too low")
 
         if rankdown:
             member = ctx.guild.get_member(loser['discord_id'])
@@ -228,10 +241,26 @@ class Danisen(commands.Cog):
         dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
         if dan_role:
             role_list.append(dan_role)
-        if role_list:
-            await ctx.author.add_roles(*role_list)
 
-        await ctx.respond(f"""You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\nif you wish to add more characters you can register multiple times!\n\nWelcome to the Danielsen!""")
+        bot_member = ctx.guild.get_member(self.bot.user.id)
+        can_add_roles = True
+        message_text = ""
+        if role_list:
+            for role in role_list:
+                can_add_roles = can_add_roles and self.can_manage_role(bot_member,role)
+            if can_add_roles:
+                await ctx.author.add_roles(*role_list)
+            else:
+                message_text += "Could not add Dan 1 role or Character roles due to bot's role being too low\n\n"
+                self.logger.warning(f"Could not add Dan 1 role or Character roles due to bot's role being too low")
+        
+        message_text += (f"You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\n"
+                         "if you wish to add more characters you can register multiple times!\n\n"
+                         "Welcome to the Danielsen!")
+
+        
+
+        await ctx.respond(message_text)
 
     @discord.commands.slash_command(description="unregister to the Danisen database!")
     async def unregister(self, ctx : discord.ApplicationContext, 
@@ -248,17 +277,29 @@ class Danisen(commands.Cog):
         self.database_con.commit()
 
         role_list = []
-        role_list.append(discord.utils.get(ctx.guild.roles, name=char1))
+        char_role = discord.utils.get(ctx.guild.roles, name=char1)
+        if char_role:
+            role_list.append(discord.utils.get(ctx.guild.roles, name=char1))
         self.logger.info(f"Removing role {char1} from member")
 
         role = self.dead_role(ctx, daniel)
         if role:
             role_list.append(role)
-            
-        if role_list:
-            await ctx.author.remove_roles(*role_list)
 
-        await ctx.respond(f"""You have now unregistered {char1}""")
+        bot_member = ctx.guild.get_member(self.bot.user.id)
+        can_remove_roles = True
+        message_text = ""
+        if role_list:
+            self.logger.info(f"{role_list}")
+            for role in role_list:
+                can_remove_roles = can_remove_roles and self.can_manage_role(bot_member,role)
+            if can_remove_roles:
+                await ctx.author.remove_roles(*role_list)
+            else:
+                message_text += f"Could not remove roles due to bot's role being too low\n\n"
+                self.logger.warning(f"Could not remove roles due to bot's role being too low")
+        message_text += f"You have now unregistered {char1}"
+        await ctx.respond(message_text)
 
     #rank command to get discord_name's player rank, (can also ignore 2nd param for own rank)
     @discord.commands.slash_command(description="Get your character rank/Put in a players name to get their character rank!")
