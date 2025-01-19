@@ -56,7 +56,7 @@ class Danisen(commands.Cog):
         ###################################################
         #SET ALL CONFIG VALUES 
 
-        self.ACTIVE_MATCHES_CHANNEL_ID = config['ACTIVE_MATCHES_CHANNEL_ID']
+        self.ACTIVE_MATCHES_CHANNEL_ID = int(config['ACTIVE_MATCHES_CHANNEL_ID'])
         self.total_dans = config['total_dans']
         #cannot rank down if ur dan is <= minimum_derank
         self.minimum_derank = config['minimum_derank']
@@ -508,10 +508,13 @@ class Danisen(commands.Cog):
         id1 = f'<@{daniel1['discord_id']}>'
         id2 = f'<@{daniel2['discord_id']}>'
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
-        webhook_msg = await channel.send(id1 +" "+ daniel1['character'] + " vs " + id2 + " " + daniel2['character'] +
+        if channel:
+            webhook_msg = await channel.send(id1 +" "+ daniel1['character'] + " vs " + id2 + " " + daniel2['character'] +
                                          "\n Note only players in the match can report it! (and admins)", view=view)
+            await webhook_msg.pin()
+        else:
+            await ctx.respond(f"""Could not find channel to send match message to (could be an issue with channel id {self.ACTIVE_MATCHES_CHANNEL_ID} or bot permissions)""")
 
-        await webhook_msg.pin()
 
     #report match score
     @discord.commands.slash_command(description="Report a match score")
