@@ -33,6 +33,7 @@ First Create Your Bot:
 ![firefox_XQiyPiNnCw](https://github.com/user-attachments/assets/bb1c6779-dc93-42c9-800b-583ce16ce298)
 
 The invite link should be the same as the following but with your client_id instead of <client_id>
+
 https://discord.com/oauth2/authorize?client_id=<client_id>&permissions=268446720&integration_type=0&scope=bot+applications.commands 
 
 
