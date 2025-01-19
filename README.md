@@ -55,4 +55,7 @@ And for point gains we have that if there  is a 2 dan or larger gap (e.g dan 1 v
 There is a maximum amount of matches that the bot makes concurrently (default is set to 3)
 you can update this amount using the /update_max_matches command
 
-The queue can be closed/opened using 
+The queue can be closed/opened using the relevant bot commands
+
+
+The bot supports having dan roles/character roles just ensure that the bots role is higher than either of the 2
