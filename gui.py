@@ -32,17 +32,6 @@ default_config_dict = {
     "queue_status": True
 }
 
-class QTextEditLogger(logging.Handler):
-    def __init__(self, text_widget):
-        super().__init__()
-        self.text_widget = text_widget
-        # Set a default format
-        self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-
-    def emit(self, record):
-        msg = self.format(record)
-        self.text_widget.append(msg)
-
 class MainTab(QWidget):
     def __init__(self, bot):
         super().__init__()
@@ -211,6 +200,28 @@ class ConfigTab(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Warning", f"Failed to load configuration: {str(e)}")
 
+class ColoredQTextEditLogger(logging.Handler):
+    COLORS = {
+        logging.DEBUG: 'black',
+        logging.INFO: 'blue',
+        logging.WARNING: 'orange',
+        logging.ERROR: 'red',
+        logging.CRITICAL: 'purple'
+    }
+
+    def __init__(self, text_widget):
+        super().__init__()
+        self.text_widget = text_widget
+        self.text_widget.setReadOnly(True)
+        format_string = '%(asctime)s - %(levelname)s - %(message)s'
+        self.setFormatter(logging.Formatter(format_string))
+
+    def emit(self, record):
+        color = self.COLORS.get(record.levelno, 'black')
+        msg = self.format(record)
+        html = f'<span style="color: {color};">{msg}</span>'
+        self.text_widget.append(html)
+
 class LogTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -231,7 +242,7 @@ class LogTab(QWidget):
         root_logger = logging.getLogger()  # Get the root logger
         root_logger.setLevel(logging.INFO)
 
-        self.logs_handler = QTextEditLogger(self.text_display)
+        self.logs_handler = ColoredQTextEditLogger(self.text_display)
         root_logger.addHandler(self.logs_handler)
 
         #Add Main Content
