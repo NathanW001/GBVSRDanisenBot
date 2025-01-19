@@ -30,7 +30,7 @@ First Create Your Bot:
 ![firefox_HsUjlQfpO2](https://github.com/user-attachments/assets/de93b627-a109-4361-b528-cc26361ad703)
 ![firefox_DAfBkhvL0G](https://github.com/user-attachments/assets/0eede925-cf92-4458-bf8c-c340721d4948)
 ![firefox_8JicCP8Vkp](https://github.com/user-attachments/assets/1c1a694d-5f50-42d0-a04d-e36e827bdb4a)
-![firefox_O5v5SmI6xe](https://github.com/user-attachments/assets/0b3e1e0a-d594-4423-a21d-72152b2fa2df)
+![firefox_XQiyPiNnCw](https://github.com/user-attachments/assets/bb1c6779-dc93-42c9-800b-583ce16ce298)
 
 Pick a channel id in your server where you want the bot to post messages
 ![Discord_1uMsu0beLJ](https://github.com/user-attachments/assets/3bed0f6a-97ae-48e6-8a8c-dcddd648eda7)
@@ -45,6 +45,7 @@ After you've done the above you can press the start button!
 
 
 # Notes
+
 
 Regarding matchmaking, the matchmaking queue will attempt to match players closest in dan, while also not matching them with the same person they previously played
 
