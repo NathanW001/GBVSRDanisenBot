@@ -13,6 +13,10 @@ class Danisen(commands.Cog):
                    ]
 
     def __init__(self, bot, database, config_path):
+        # Set up the logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+
         self.bot = bot
         self._last_member = None
 
@@ -41,7 +45,7 @@ class Danisen(commands.Cog):
                 with open(self.config_path, 'r') as f:
                     config = json.load(f)
         except Exception as e:
-            print("Warning", f"Failed to load configuration: {str(e)}")
+            self.logger.warning("Warning", f"Failed to load configuration: {str(e)}")
 
         ###################################################
         #SET ALL CONFIG VALUES 
@@ -79,11 +83,11 @@ class Danisen(commands.Cog):
     def dead_role(self,ctx, player):
         role = None
 
-        print(f'Checking if dan should be removed as well')
+        self.logger.info(f'Checking if dan should be removed as well')
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan={player['dan']}")
         remaining_daniel = res.fetchone()
         if not remaining_daniel:
-            print(f'Dan role {player['dan']} will be removed')
+            self.logger.info(f'Dan role {player['dan']} will be removed')
             role = (discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}"))
             return role
 
@@ -127,9 +131,9 @@ class Danisen(commands.Cog):
             loser_rank[1] = 0
             rankdown = True
 
-        print("New Scores")
-        print(f"Winner : {winner['player_name']} dan {winner_rank[0]}, points {winner_rank[1]}")
-        print(f"Loser : {loser['player_name']} dan {loser_rank[0]}, points {loser_rank[1]}")
+        self.logger.info("New Scores")
+        self.logger.info(f"Winner : {winner['player_name']} dan {winner_rank[0]}, points {winner_rank[1]}")
+        self.logger.info(f"Loser : {loser['player_name']} dan {loser_rank[0]}, points {loser_rank[1]}")
 
         self.database_cur.execute(f"UPDATE players SET dan = {winner_rank[0]}, points = {winner_rank[1]} WHERE player_name='{winner['player_name']}' AND character='{winner['character']}'")
         self.database_cur.execute(f"UPDATE players SET dan = {loser_rank[0]}, points = {loser_rank[1]} WHERE player_name='{loser['player_name']}' AND character='{loser['character']}'")
@@ -142,7 +146,7 @@ class Danisen(commands.Cog):
             if role:
                 await member.add_roles(role)
 
-            print(f"Dan {winner_rank[0]} added to {member.name}")
+            self.logger.info(f"Dan {winner_rank[0]} added to {member.name}")
             role = self.dead_role(ctx, winner)
             if role:
                 await member.remove_roles(role)
@@ -217,10 +221,10 @@ class Danisen(commands.Cog):
             if char_role:
                 role_list.append(char_role)
             insert_new_player(tuple(line),self.database_cur)
-        print(f"Adding to db {player_name} {char1} {char2} {char3}")
+        self.logger.info(f"Adding to db {player_name} {char1} {char2} {char3}")
         self.database_con.commit()
 
-        print(f"Adding Character and Dan roles to user")
+        self.logger.info(f"Adding Character and Dan roles to user")
         dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
         if dan_role:
             role_list.append(dan_role)
@@ -239,13 +243,13 @@ class Danisen(commands.Cog):
             await ctx.respond("You are not registered with that character")
             return
 
-        print(f"Removing {ctx.author.name} {ctx.author.id} {char1} from db")
+        self.logger.info(f"Removing {ctx.author.name} {ctx.author.id} {char1} from db")
         self.database_cur.execute(f"DELETE FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
         self.database_con.commit()
 
         role_list = []
         role_list.append(discord.utils.get(ctx.guild.roles, name=char1))
-        print(f"Removing role {char1} from member")
+        self.logger.info(f"Removing role {char1} from member")
 
         role = self.dead_role(ctx, daniel)
         if role:
@@ -286,20 +290,20 @@ class Danisen(commands.Cog):
     @discord.commands.slash_command(description="leave the danisen queue")
     async def leave_queue(self, ctx : discord.ApplicationContext):
         name = ctx.author.name
-        print(f'leave queue called for {name}')
+        self.logger.info(f'leave queue called for {name}')
         daniel = None
         for i, member in enumerate(self.matchmaking_queue):
             if member and (member['player_name'] == name):
-                print(f'found {name} in MMQ')
+                self.logger.info(f'found {name} in MMQ')
                 daniel = self.matchmaking_queue.pop(i)
-                print(f"removed {name} from MMQ {self.matchmaking_queue}")
+                self.logger.info(f"removed {name} from MMQ {self.matchmaking_queue}")
         
         if daniel:
             for i, member in enumerate(self.dans_in_queue[daniel['dan']]):
                 if member['player_name'] == name:
-                    print(f'found {name} in Danq')
+                    self.logger.info(f'found {name} in Danq')
                     daniel = self.dans_in_queue[daniel['dan']].pop(i)
-                    print(f"removed {name} from DanQ {self.dans_in_queue[daniel['dan']]}")
+                    self.logger.info(f"removed {name} from DanQ {self.dans_in_queue[daniel['dan']]}")
             
             self.in_queue[daniel['player_name']][0] = False
             await ctx.respond("You have been removed from the queue")
@@ -328,11 +332,11 @@ class Danisen(commands.Cog):
         daniel['requeue'] = rejoin_queue
 
         #Check if in Queue already
-        print(f"join_queue called for {ctx.author.name}")
+        self.logger.info(f"join_queue called for {ctx.author.name}")
         if ctx.author.name not in self.in_queue.keys():
-            print(f"added {ctx.author.name} to in_queue dict")
+            self.logger.info(f"added {ctx.author.name} to in_queue dict")
             self.in_queue[ctx.author.name] = [True, None]
-            print(f"in_queue {self.in_queue}")
+            self.logger.info(f"in_queue {self.in_queue}")
         elif self.in_queue[ctx.author.name][0]:
             await ctx.respond(f"You are already in the queue")
             return
@@ -340,9 +344,9 @@ class Danisen(commands.Cog):
 
         #check if in a match already
         if ctx.author.name not in self.in_match.keys():
-            print(f"added {ctx.author.name} to in_match dict")
+            self.logger.info(f"added {ctx.author.name} to in_match dict")
             self.in_match[ctx.author.name] = False
-            print(f"in_match {self.in_match}")
+            self.logger.info(f"in_match {self.in_match}")
         elif self.in_match[ctx.author.name]:
             await ctx.respond(f"You are in an active match and cannot queue up")
             return
@@ -351,19 +355,19 @@ class Danisen(commands.Cog):
         self.matchmaking_queue.append(daniel)
         await ctx.respond(f"You've been added to the matchmaking queue with {char}")
 
-        print("Current MMQ")
-        print(self.matchmaking_queue)
-        print("Current DanQ")
-        print(self.dans_in_queue)
+        self.logger.info("Current MMQ")
+        self.logger.info(self.matchmaking_queue)
+        self.logger.info("Current DanQ")
+        self.logger.info(self.dans_in_queue)
         #matchmake
         if (self.cur_active_matches != self.max_active_matches and
             len(self.matchmaking_queue) >= 2):
-            print("matchmake function called")
+            self.logger.info("matchmake function called")
             await self.matchmake(ctx.interaction)
 
     def rejoin_queue(self, player):
         if self.queue_status == False:
-            print(f"q is closed so no rejoin")
+            self.logger.info(f"q is closed so no rejoin")
             return
 
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player["discord_id"]} AND character='{player["character"]}'")
@@ -374,7 +378,7 @@ class Danisen(commands.Cog):
         self.in_queue[player['player_name']][0] = True
         self.dans_in_queue[player['dan']].append(player)
         self.matchmaking_queue.append(player)
-        print(f"{player['player_name']} has rejoined the queue")
+        self.logger.info(f"{player['player_name']} has rejoined the queue")
 
         
     async def matchmake(self, ctx : discord.Interaction):
@@ -385,14 +389,14 @@ class Danisen(commands.Cog):
                 continue
 
             self.in_queue[daniel1['player_name']][0] = False
-            print(f"Updated in_queue to set {daniel1} to False")
-            print(f"in_queue {self.in_queue}")
+            self.logger.info(f"Updated in_queue to set {daniel1} to False")
+            self.logger.info(f"in_queue {self.in_queue}")
 
 
             same_daniel = self.dans_in_queue[daniel1['dan']].pop(0)
             #sanity check that this is also the latest daniel in the respective dan queue
             if daniel1 != same_daniel:
-                print(f"Somethings gone very wrong... daniel queues are not synchronized {daniel1=} {same_daniel=}")
+                self.logger.error(f"Somethings gone very wrong... daniel queues are not synchronized {daniel1=} {same_daniel=}")
                 return
             
             #iterate through daniel queues to find suitable opponent
@@ -412,7 +416,7 @@ class Danisen(commands.Cog):
                 if  1 <= cur_dan <= 7:
                     check_dan.append(cur_dan)
             
-            print(f"dan queues to check {check_dan}")
+            self.logger.info(f"dan queues to check {check_dan}")
             old_daniel = None
             matchmade = False
             for dan in check_dan:
@@ -420,25 +424,25 @@ class Danisen(commands.Cog):
                     daniel2 = self.dans_in_queue[dan].pop(0)
                     if self.in_queue[daniel1['player_name']][1] == daniel2['player_name']:
                         #same match would occur, find different opponent
-                        print(f"Same match would occur but prevented {daniel1} vs {daniel2}")
+                        self.logger.info(f"Same match would occur but prevented {daniel1} vs {daniel2}")
                         old_daniel = daniel2
                         continue
                     
                     self.in_queue[daniel2['player_name']] = [False, daniel1['player_name']]
                     self.in_queue[daniel1['player_name']] = [False, daniel2['player_name']]
-                    print(f"Updated in_queue to set last played match")
-                    print(f"in_queue {self.in_queue}")
+                    self.logger.info(f"Updated in_queue to set last played match")
+                    self.logger.info(f"in_queue {self.in_queue}")
 
                     #this is so we clean up the main queue later for players that have already been matched
                     for idx in reversed(range(len(self.matchmaking_queue))):
                         player = self.matchmaking_queue[idx]
                         if player and (player['player_name'] == daniel2['player_name']):
                              self.matchmaking_queue[idx] = None
-                             print(f"Set {player['player_name']} to none in matchmaking queue")
-                             print(self.matchmaking_queue)
+                             self.logger.info(f"Set {player['player_name']} to none in matchmaking queue")
+                             self.logger.info(self.matchmaking_queue)
 
 
-                    print(f"match made between {daniel1} and {daniel2}")
+                    self.logger.info(f"match made between {daniel1} and {daniel2}")
                     self.in_match[daniel1['player_name']] = True
                     self.in_match[daniel2['player_name']] = True
                     matchmade = True
@@ -448,12 +452,12 @@ class Danisen(commands.Cog):
                 #readding old daniel back into the q
                 self.dans_in_queue[old_daniel['dan']].insert(0, old_daniel)
                 self.in_queue[old_daniel['player_name']][0] = True
-                print(f"we readded daniel2 {old_daniel}")
+                self.logger.info(f"we readded daniel2 {old_daniel}")
             if not matchmade:
                  self.matchmaking_queue.append(daniel1)
                  self.dans_in_queue[daniel1['dan']].append(daniel1)
                  self.in_queue[daniel1['player_name']][0] = True
-                 print(f"we readded daniel1 {daniel1} and are breaking from matchmake")
+                 self.logger.info(f"we readded daniel1 {daniel1} and are breaking from matchmake")
                  break
 
     async def create_match_interaction(self, ctx : discord.Interaction,
@@ -489,7 +493,7 @@ class Danisen(commands.Cog):
             await ctx.respond(f"""No player named {player2_name} with character {char2}""")
             return
 
-        print(f"reported match {player1_name} vs {player2_name} as {winner} win")
+        self.logger.info(f"reported match {player1_name} vs {player2_name} as {winner} win")
         if (winner == "player1") :
             winner_rank, loser_rank = await self.score_update(ctx, player1, player2)
             winner = player1_name

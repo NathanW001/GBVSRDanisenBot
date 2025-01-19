@@ -1,10 +1,16 @@
 import discord
 import json
+import logging
 class MatchSelect(discord.ui.Select):
     def __init__(self, bot, p1, p2):
         self.p1 = p1
         self.p2 = p2
         self.bot = bot
+
+        # Create and configure logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+
         options = [
             discord.SelectOption(
                 label=f"{p1["player_name"]} {p1["character"]}",
@@ -37,10 +43,10 @@ class MatchSelect(discord.ui.Select):
         self.view.disable_all_items()
         self.view.stop()
 
-        print("Match has been reported")
+        self.logger.info("Match has been reported")
 
         self.bot.cur_active_matches -= 1
-        print(f"cur_active_matches reduced {self.bot.cur_active_matches}")
+        self.logger.info(f"cur_active_matches reduced {self.bot.cur_active_matches}")
 
         #remove players from match dict
         self.bot.in_match[self.p1['player_name']] = False

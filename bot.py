@@ -3,6 +3,9 @@ import sqlite3
 from cogs.danisen import *
 import json
 import os
+import logging
+
+
 
 def create_bot():
     config_path = "config.json"
@@ -15,9 +18,13 @@ def create_bot():
 
     bot.add_cog(Danisen(bot,con,config_path))
 
+    # Create and configure logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
     @bot.event
     async def on_ready():
-        print(f'We have logged in as {bot.user}')
+        logger.info(f'We have logged in as {bot.user}')
     
     return bot
 

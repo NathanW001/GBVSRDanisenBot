@@ -10,7 +10,8 @@ from io import StringIO
 import logging
 
 logging.basicConfig(
-    filename='error.log',
+    filename='bot.log',
+    filemode='w',
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
@@ -31,9 +32,24 @@ default_config_dict = {
     "queue_status": True
 }
 
+class QTextEditLogger(logging.Handler):
+    def __init__(self, text_widget):
+        super().__init__()
+        self.text_widget = text_widget
+        # Set a default format
+        self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
+    def emit(self, record):
+        msg = self.format(record)
+        self.text_widget.append(msg)
+
 class MainTab(QWidget):
     def __init__(self, bot):
         super().__init__()
+
+        # Create and configure logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
 
         layout = QVBoxLayout(self)
 
@@ -64,19 +80,19 @@ class MainTab(QWidget):
             self.status_label.setText("Current State: Stopped")
 
     async def start_bot(self):
-        print("start_bot")
+        self.logger.info("start_bot")
         try:
             if os.path.exists("config.json"):
                 with open("config.json", 'r') as f:
                     config = json.load(f)
         except Exception as e:
-            print("Warning", f"Failed to load configuration: {str(e)}")
+            self.logger.warning("Warning", f"Failed to load configuration: {str(e)}")
         token = config['bot_token']
         await self.bot.start(token)
 
 
     async def stop_bot(self):
-        print("stop_bot")
+        self.logger.info("stop_bot")
         await self.bot.close()
 
 
@@ -195,16 +211,6 @@ class ConfigTab(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Warning", f"Failed to load configuration: {str(e)}")
 
-
-class OutputRedirector(StringIO):
-    def __init__(self, text_widget, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.text_widget = text_widget
-
-    def write(self, text):
-        super().write(text)
-        self.text_widget.append(text.rstrip())
-
 class LogTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -212,19 +218,21 @@ class LogTab(QWidget):
         layout = QVBoxLayout(self)
         self.config_form_layout = QFormLayout()
 
+        # Create and configure logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+
         # Create text display
         self.text_display = QTextEdit()
         self.text_display.setReadOnly(True)
         layout.addWidget(self.text_display)
 
-        self.stdout_redirector = OutputRedirector(self.text_display)
-        sys.stdout = self.stdout_redirector
+        # Configure the root logger instead of creating a new one
+        root_logger = logging.getLogger()  # Get the root logger
+        root_logger.setLevel(logging.INFO)
 
-        self.stderr_redirector = OutputRedirector(self.text_display)
-        sys.stderr = self.stderr_redirector
-
-        # Store original stdout for cleanup
-        self.original_stdout = sys.__stdout__
+        self.logs_handler = QTextEditLogger(self.text_display)
+        root_logger.addHandler(self.logs_handler)
 
         #Add Main Content
         self.save_logs_button = QPushButton(text="Save Logs")
@@ -246,12 +254,16 @@ class LogTab(QWidget):
             try:
                 with open(file_path, 'w', encoding='utf-8') as file:
                     file.write(text)
-                print(f"Output saved to {file_path}")
+                self.logger.info(f"Output saved to {file_path}")
             except Exception as e:
-                print(f"Error saving file: {str(e)}")
+                self.logger.error(f"Error saving file: {str(e)}")
 class DanisenWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        # Create and configure logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
 
         #Create config file if non-existant
         self.settings_file = "config.json"
@@ -259,7 +271,7 @@ class DanisenWindow(QMainWindow):
             with open(self.settings_file, 'x') as f:
                 json.dump(default_config_dict, f, indent=4)
         except FileExistsError:
-            print(f"The file '{self.settings_file}' already exists")
+            self.logger.info(f"The file '{self.settings_file}' already exists")
 
         #Creating DanisenBot
         self.bot = create_bot()
