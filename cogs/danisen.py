@@ -56,7 +56,10 @@ class Danisen(commands.Cog):
         ###################################################
         #SET ALL CONFIG VALUES 
 
-        self.ACTIVE_MATCHES_CHANNEL_ID = int(config['ACTIVE_MATCHES_CHANNEL_ID'])
+        if (config['ACTIVE_MATCHES_CHANNEL_ID']):
+            self.ACTIVE_MATCHES_CHANNEL_ID = int(config['ACTIVE_MATCHES_CHANNEL_ID'])
+        else:
+            self.ACTIVE_MATCHES_CHANNEL_ID = 0
         self.total_dans = config['total_dans']
         #cannot rank down if ur dan is <= minimum_derank
         self.minimum_derank = config['minimum_derank']
