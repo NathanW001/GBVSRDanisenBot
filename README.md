@@ -32,6 +32,11 @@ First Create Your Bot:
 ![firefox_8JicCP8Vkp](https://github.com/user-attachments/assets/1c1a694d-5f50-42d0-a04d-e36e827bdb4a)
 ![firefox_XQiyPiNnCw](https://github.com/user-attachments/assets/bb1c6779-dc93-42c9-800b-583ce16ce298)
 
+The invite link should be the same as the following but with your client_id instead of <client_id>
+
+https://discord.com/oauth2/authorize?client_id=<client_id>&permissions=268446720&integration_type=0&scope=bot+applications.commands 
+
+
 Pick a channel id in your server where you want the bot to post messages
 ![Discord_1uMsu0beLJ](https://github.com/user-attachments/assets/3bed0f6a-97ae-48e6-8a8c-dcddd648eda7)
 
