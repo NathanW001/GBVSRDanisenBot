@@ -1,3 +1,9 @@
+# Basic Bot Documentation
+gui and gui related funcitons are in gui.py
+all slash commands are in danisen.py
+bot creation and adding the danisen cog is in bot.py
+some database helper functions in database.py
+
 This bot uses Pycord and not Discord.py to clarify (these packages have the same name but have slightly different functionality)
 (https://docs.pycord.dev/en/stable/index.html)
 
