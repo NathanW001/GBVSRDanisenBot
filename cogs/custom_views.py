@@ -53,6 +53,7 @@ class MatchSelect(discord.ui.Select):
         self.bot.in_match[self.p2['player_name']] = False
 
         if self.values[0] == "Cancel":
+            self.logger.info(f"Match has been cancelled between {self.p1['player_name']} and {self.p2['player_name']}")
             await interaction.respond(f"Match has been cancelled you will be not readded to queue")
             await interaction.message.delete()
             return

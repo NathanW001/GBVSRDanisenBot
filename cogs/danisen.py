@@ -199,8 +199,9 @@ class Danisen(commands.Cog):
             title="Help",
             description="list of all commands",
             color=discord.Color.blurple())
-        em.set_thumbnail(
-            url=self.bot.user.avatar.url)
+        if self.bot.user.avatar.url:
+            em.set_thumbnail(
+                url=self.bot.user.avatar.url)
 
         for slash_command in self.walk_commands():
             em.add_field(name=slash_command.name, 
@@ -362,6 +363,7 @@ class Danisen(commands.Cog):
 
         #check if q open
         if self.queue_status == False:
+            self.logger.info("Queue is closed ending join function")
             await ctx.respond(f"The matchmaking queue is currently closed")
             return
 
@@ -369,6 +371,7 @@ class Danisen(commands.Cog):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char}'")
         daniel = res.fetchone()
         if daniel == None:
+            self.logger.info(f"{ctx.author.name} not registered with {char}")
             await ctx.respond(f"You are not registered with that character")
             return
 
@@ -382,6 +385,7 @@ class Danisen(commands.Cog):
             self.in_queue[ctx.author.name] = [True, None]
             self.logger.info(f"in_queue {self.in_queue}")
         elif self.in_queue[ctx.author.name][0]:
+            self.logger.info(f"{ctx.author.name} in the queue")
             await ctx.respond(f"You are already in the queue")
             return
         self.in_queue[ctx.author.name][0] = True
@@ -392,6 +396,7 @@ class Danisen(commands.Cog):
             self.in_match[ctx.author.name] = False
             self.logger.info(f"in_match {self.in_match}")
         elif self.in_match[ctx.author.name]:
+            self.logger.info(f"{ctx.author.name} is in an active match and cannot queue up")
             await ctx.respond(f"You are in an active match and cannot queue up")
             return
 
@@ -404,7 +409,7 @@ class Danisen(commands.Cog):
         self.logger.info("Current DanQ")
         self.logger.info(self.dans_in_queue)
         #matchmake
-        if (self.cur_active_matches != self.max_active_matches and
+        if (self.cur_active_matches < self.max_active_matches and
             len(self.matchmaking_queue) >= 2):
             self.logger.info("matchmake function called")
             await self.matchmake(ctx.interaction)
@@ -424,9 +429,18 @@ class Danisen(commands.Cog):
         self.matchmaking_queue.append(player)
         self.logger.info(f"{player['player_name']} has rejoined the queue")
 
-        
+    @discord.commands.slash_command(description="view players in the queue")
+    async def view_queue(self, ctx : discord.ApplicationContext):
+        self.matchmaking_queue = [player for player in self.matchmaking_queue if player]
+        self.logger.info("view_queue called")
+        self.logger.info("Current MMQ")
+        self.logger.info(self.matchmaking_queue)
+        self.logger.info("Current DanQ")
+        self.logger.info(self.dans_in_queue)
+        await ctx.respond(f"Current full MMQ {self.matchmaking_queue}\nCurrent full DanQ {self.dans_in_queue}")
+
     async def matchmake(self, ctx : discord.Interaction):
-        while (self.cur_active_matches != self.max_active_matches and
+        while (self.cur_active_matches < self.max_active_matches and
                 len(self.matchmaking_queue) >= 2):
             daniel1 = self.matchmaking_queue.pop(0)
             if not daniel1:
@@ -512,7 +526,7 @@ class Danisen(commands.Cog):
         id2 = f'<@{daniel2['discord_id']}>'
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
-            webhook_msg = await channel.send(id1 +" "+ daniel1['character'] + " vs " + id2 + " " + daniel2['character'] +
+            webhook_msg = await channel.send(f"{id1} {daniel1['character']} dan {daniel1['dan']} points {daniel1['points']} vs {id2} {daniel2['character']} dan {daniel2['dan']} points {daniel2['points']} "+
                                          "\n Note only players in the match can report it! (and admins)", view=view)
             await webhook_msg.pin()
         else:
