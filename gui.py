@@ -8,6 +8,7 @@ import os
 import qasync
 from io import StringIO
 import logging
+import shutil
 
 logging.basicConfig(
     filename='bot.log',
@@ -283,9 +284,60 @@ class LogTab(QWidget):
                 self.logger.info(f"Output saved to {file_path}")
             except Exception as e:
                 self.logger.error(f"Error saving file: {str(e)}")
+
+class AdminTab(QWidget):
+    def __init__(self,con):
+        super().__init__()
+        self.con = con
+
+        # Create and configure logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+
+        layout = QVBoxLayout(self)
+        # Create a button to trigger the save file dialog
+        self.reset_season_button = QPushButton('Reset Danisen for new season\n(will backup danisen db file)', self)
+        self.reset_season_button.clicked.connect(self.reset_season)
+
+        layout.addWidget(self.reset_season_button)
+    def reset_season(self):
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Output",
+            "",
+            "Database Files (*.db);;All Files (*)"
+        )
+
+        if file_path:
+            shutil.copy("danisen.db", file_path)
+            self.logger.info(f"danisen.db file copied to {file_path}")
+
+        cursor = self.con.cursor()
+        cursor.execute(f"PRAGMA table_info(players)")
+        columns = cursor.fetchall()
+        
+        # Print column information
+        self.logger.info(f"\nStructure for table 'players':")
+        self.logger.info("-" * 50)
+        self.logger.info(f"{'Column Name':<20} {'Type':<10} {'Nullable':<10} {'Primary Key':<12}")
+        self.logger.info("-" * 50)
+        
+        for col in columns:
+            cid, name, type_, notnull, default, pk = col
+            self.logger.info(f"{name:<20} {type_:<10} {'No' if notnull else 'Yes':<10} {'Yes' if pk else 'No':<12} {default}")
+    
+        cursor.execute(f"""
+            UPDATE players
+            SET 
+                dan = ?,
+                points = ?
+        """, (1,0))
+
+        self.con.commit()
 class DanisenWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.con = sqlite3.connect("danisen.db")
 
         # Create and configure logger
         self.logger = logging.getLogger(__name__)
@@ -300,7 +352,7 @@ class DanisenWindow(QMainWindow):
             self.logger.info(f"The file '{self.settings_file}' already exists")
 
         #Creating DanisenBot
-        self.bot = create_bot()
+        self.bot = create_bot(self.con)
 
         self.setWindowTitle("Danisen Bot")
         self.setMinimumSize(600, 400)
@@ -318,6 +370,7 @@ class DanisenWindow(QMainWindow):
         tabs.addTab(MainTab(self.bot), "Main")
         tabs.addTab(ConfigTab(self.bot), "Config")
         tabs.addTab(LogTab(), "Logs")
+        tabs.addTab(AdminTab(self.con), "Admin")
         #TODO tabs.addTab(self.create_logs_tab(), "Logs")
 
         layout.addWidget(tabs)
