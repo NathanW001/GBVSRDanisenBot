@@ -80,8 +80,6 @@ class Danisen(commands.Cog):
         if queue_status == False:
             self.matchmaking_queue = []
             self.dans_in_queue = {dan:[] for dan in range(1,self.total_dans+1)}
-            self.max_active_matches = 3
-            self.cur_active_matches = 0
             self.in_queue = {}
             self.in_match = {}
             await ctx.respond(f"The matchmaking queue has been disabled")
