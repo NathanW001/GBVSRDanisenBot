@@ -386,7 +386,6 @@ class Danisen(commands.Cog):
             self.logger.info(f"{ctx.author.name} in the queue")
             await ctx.respond(f"You are already in the queue")
             return
-        self.in_queue[ctx.author.name][0] = True
 
         #check if in a match already
         if ctx.author.name not in self.in_match.keys():
@@ -397,6 +396,8 @@ class Danisen(commands.Cog):
             self.logger.info(f"{ctx.author.name} is in an active match and cannot queue up")
             await ctx.respond(f"You are in an active match and cannot queue up")
             return
+
+        self.in_queue[ctx.author.name][0] = True
 
         self.dans_in_queue[daniel['dan']].append(daniel)
         self.matchmaking_queue.append(daniel)
