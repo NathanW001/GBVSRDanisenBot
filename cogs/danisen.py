@@ -60,6 +60,12 @@ class Danisen(commands.Cog):
             self.ACTIVE_MATCHES_CHANNEL_ID = int(config['ACTIVE_MATCHES_CHANNEL_ID'])
         else:
             self.ACTIVE_MATCHES_CHANNEL_ID = 0
+        
+        if 'REPORTED_MATCHES_CHANNEL_ID' in config and config['REPORTED_MATCHES_CHANNEL_ID']:
+            self.REPORTED_MATCHES_CHANNEL_ID = int(config['REPORTED_MATCHES_CHANNEL_ID'])
+        else:
+            self.REPORTED_MATCHES_CHANNEL_ID = 0
+
         self.total_dans = config['total_dans']
         #cannot rank down if ur dan is <= minimum_derank
         self.minimum_derank = config['minimum_derank']
@@ -528,6 +534,11 @@ class Danisen(commands.Cog):
             webhook_msg = await channel.send(f"{id1} {daniel1['character']} dan {daniel1['dan']} points {daniel1['points']} vs {id2} {daniel2['character']} dan {daniel2['dan']} points {daniel2['points']} "+
                                          "\n Note only players in the match can report it! (and admins)", view=view)
             await webhook_msg.pin()
+
+            #deleting the pin added system message (checking last 5 messages incase some other stuff was posted in the channel in the meantime)
+            async for message in channel.history(limit=5):
+                if message.type == discord.MessageType.pins_add:
+                    await message.delete()
         else:
             await ctx.respond(f"""Could not find channel to send match message to (could be an issue with channel id {self.ACTIVE_MATCHES_CHANNEL_ID} or bot permissions)""")
 
@@ -576,7 +587,11 @@ class Danisen(commands.Cog):
             winner = player2['player_name']
             loser = player1['player_name']
 
-        await interaction.respond(f"Match has been reported as {winner}'s victory over {loser}\n{player1['player_name']}'s {player1['character']} rank is now {winner_rank[0]} dan {winner_rank[1]} points\n{player2['player_name']}'s {player2['character']} rank is now {loser_rank[0]} dan {loser_rank[1]} points")
+        channel = self.bot.get_channel(self.REPORTED_MATCHES_CHANNEL_ID)
+        if channel:
+            await channel.send(f"Match has been reported as {winner}'s victory over {loser}\n{player1['player_name']}'s {player1['character']} rank is now {winner_rank[0]} dan {winner_rank[1]} points\n{player2['player_name']}'s {player2['character']} rank is now {loser_rank[0]} dan {loser_rank[1]} points")
+        else:
+            self.logger.warning("No Report Matches Channel")
 
     @discord.commands.slash_command(description="See players in a specific dan")
     async def dan(self, ctx : discord.ApplicationContext,

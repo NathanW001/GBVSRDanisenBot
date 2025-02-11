@@ -41,6 +41,7 @@ sys.stderr = LoggedStderr()
 default_config_dict = {
     "bot_token": "",
     "ACTIVE_MATCHES_CHANNEL_ID": "",
+    "REPORTED_MATCHES_CHANNEL_ID": "",
     "total_dans": 7,
     "minimum_derank": 2,
     "maximum_rank_difference": 1,
@@ -118,6 +119,9 @@ class ConfigTab(QWidget):
         self.ACTIVE_MATCHES_CHANNEL_ID = QLineEdit()
         self.ACTIVE_MATCHES_CHANNEL_ID.setPlaceholderText("Enter the discord channel id where you want the bot to post match messages")
 
+        self.REPORTED_MATCHES_CHANNEL_ID = QLineEdit()
+        self.REPORTED_MATCHES_CHANNEL_ID.setPlaceholderText("Enter the discord channel id where you want the bot to report match results")
+
         self.total_dans = QSpinBox()
         self.total_dans.setRange(1, 12)
         self.total_dans.setValue(7)
@@ -140,7 +144,8 @@ class ConfigTab(QWidget):
 
         #Adding fields to form
         self.config_form_layout.addRow("Bot Token:", self.bot_token)
-        self.config_form_layout.addRow("Match Channel Id:", self.ACTIVE_MATCHES_CHANNEL_ID)
+        self.config_form_layout.addRow("Active Match Channel Id:", self.ACTIVE_MATCHES_CHANNEL_ID)
+        self.config_form_layout.addRow("Reported Match Channel Id:", self.REPORTED_MATCHES_CHANNEL_ID)
         self.config_form_layout.addRow("Total Dans:", self.total_dans)
         self.config_form_layout.addRow("Minimum Derank:", self.minimum_derank)
         self.config_form_layout.addRow("Maximum Rank Difference:", self.maximum_rank_difference)
@@ -172,6 +177,7 @@ class ConfigTab(QWidget):
             #Text
             "bot_token" : self.bot_token.text(),
             "ACTIVE_MATCHES_CHANNEL_ID" : self.ACTIVE_MATCHES_CHANNEL_ID.text(),
+            "REPORTED_MATCHES_CHANNEL_ID" : self.REPORTED_MATCHES_CHANNEL_ID.text(),
             #Numbers
             "total_dans" : self.total_dans.value(),
             "minimum_derank" : self.minimum_derank.value(),
@@ -186,6 +192,7 @@ class ConfigTab(QWidget):
         #Text
         self.bot_token.setText(config.get("bot_token", ""))
         self.ACTIVE_MATCHES_CHANNEL_ID.setText(config.get("ACTIVE_MATCHES_CHANNEL_ID", ""))
+        self.REPORTED_MATCHES_CHANNEL_ID.setText(config.get("REPORTED_MATCHES_CHANNEL_ID", ""))
         #Numbers
         self.total_dans.setValue(config.get("total_dans", 7))
         self.minimum_derank.setValue(config.get("minimum_derank", 2))

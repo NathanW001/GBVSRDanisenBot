@@ -54,7 +54,7 @@ class MatchSelect(discord.ui.Select):
 
         if self.values[0] == "Cancel":
             self.logger.info(f"Match has been cancelled between {self.p1['player_name']} and {self.p2['player_name']}")
-            await interaction.respond(f"Match has been cancelled you will be not readded to queue")
+            await interaction.respond(f"Match has been cancelled <@{self.p1['discord_id']}> <@{self.p2['discord_id']}> will be not readded to queue")
             await interaction.message.delete()
             return
         elif self.values[0] == f"{self.p1["player_name"]} {self.p1["character"]}":
