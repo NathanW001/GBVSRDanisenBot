@@ -4,7 +4,7 @@ from cogs.database import *
 from cogs.custom_views import *
 import os
 class Danisen(commands.Cog):
-    characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki"]
+    characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki","Ogre"]
     players = ["player1", "player2"]
     dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.from_rgb(255,255,0), discord.Colour.from_rgb(255,153,0),
                    discord.Colour.from_rgb(39, 78, 19), discord.Colour.from_rgb(97,0,162), discord.Colour.from_rgb(0,0,177), discord.Colour.from_rgb(120,63,4),
@@ -178,6 +178,12 @@ class Danisen(commands.Cog):
                 await member.remove_roles(role)
 
         return winner_rank, loser_rank
+    # Custom decorator for validation
+    def is_valid_char(self, char):
+        return char in self.characters
+
+    async def character_autocomplete(self, ctx: discord.AutocompleteContext):
+        return [character for character in self.characters if character.lower().startswith(ctx.value.lower())]
 
     async def player_autocomplete(self, ctx: discord.AutocompleteContext):
         res = self.database_cur.execute(f"SELECT player_name FROM players")
@@ -189,10 +195,12 @@ class Danisen(commands.Cog):
     @discord.commands.default_permissions(manage_roles=True)
     async def set_rank(self, ctx : discord.ApplicationContext,
                         player_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char : discord.Option(str, choices=characters),
+                        char : discord.Option(str, autocomplete=character_autocomplete),
                         dan :  discord.Option(int),
                         points : discord.Option(int)):
-
+        if not self.is_valid_char(char):
+            await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
+            return
         self.database_cur.execute(f"UPDATE players SET dan = {dan}, points = {points} WHERE player_name='{player_name}' AND character='{char}'")
         self.database_con.commit()
         await ctx.respond(f"{player_name}'s {char} rank updated to be dan {dan} points {points}")
@@ -217,32 +225,20 @@ class Danisen(commands.Cog):
     #registers player+char to db
     @discord.commands.slash_command(description="Register to the Danisen database!")
     async def register(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, choices=characters),
-                    char2 : discord.Option(str, choices=characters, required=False),
-                    char3 : discord.Option(str, choices=characters, required=False)):
-        char3 = char3 or ""
-        char2 = char2 or ""
+                    char1 : discord.Option(str, autocomplete=character_autocomplete)):
         player_name = ctx.author.name
+
+        if not self.is_valid_char(char1):
+            await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
+            return
+
         line = [ctx.author.id, player_name, char1, 1, 0]
         insert_new_player(tuple(line),self.database_cur)
         role_list = []
         char_role = discord.utils.get(ctx.guild.roles, name=char1)
         if char_role:
             role_list.append(char_role)
-
-        if char2:
-            line[2] = char2
-            char_role=discord.utils.get(ctx.guild.roles, name=char2)
-            if char_role:
-                role_list.append(char_role)
-            insert_new_player(tuple(line),self.database_cur)
-        if char3:
-            line[2] = char3
-            char_role=discord.utils.get(ctx.guild.roles, name=char3)
-            if char_role:
-                role_list.append(char_role)
-            insert_new_player(tuple(line),self.database_cur)
-        self.logger.info(f"Adding to db {player_name} {char1} {char2} {char3}")
+        self.logger.info(f"Adding to db {player_name} {char1}")
         self.database_con.commit()
 
         self.logger.info(f"Adding Character and Dan roles to user")
@@ -262,7 +258,7 @@ class Danisen(commands.Cog):
                 message_text += "Could not add Dan 1 role or Character roles due to bot's role being too low\n\n"
                 self.logger.warning(f"Could not add Dan 1 role or Character roles due to bot's role being too low")
         
-        message_text += (f"You are now registered as {player_name} with the following character/s {char1} {char2} {char3}\n"
+        message_text += (f"You are now registered as {player_name} with the following character/s {char1}\n"
                          "if you wish to add more characters you can register multiple times!\n\n"
                          "Welcome to the Danielsen!")
 
@@ -272,7 +268,12 @@ class Danisen(commands.Cog):
 
     @discord.commands.slash_command(description="unregister to the Danisen database!")
     async def unregister(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, choices=characters)):
+                    char1 : discord.Option(str, autocomplete=character_autocomplete)):
+
+        if not self.is_valid_char(char1):
+            await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
+            return
+
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
         daniel = res.fetchone()
 
@@ -312,8 +313,12 @@ class Danisen(commands.Cog):
     #rank command to get discord_name's player rank, (can also ignore 2nd param for own rank)
     @discord.commands.slash_command(description="Get your character rank/Put in a players name to get their character rank!")
     async def rank(self, ctx : discord.ApplicationContext,
-                char : discord.Option(str, choices=characters),
+                char : discord.Option(str, autocomplete=character_autocomplete),
                 discord_name :  discord.Option(str, autocomplete=player_autocomplete)):
+        if not self.is_valid_char(char):
+            await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
+            return
+
         members = ctx.guild.members
         member = None
         for m in members:
@@ -361,8 +366,11 @@ class Danisen(commands.Cog):
     #joins the matchmaking queue
     @discord.commands.slash_command(description="queue up for danisen games")
     async def join_queue(self, ctx : discord.ApplicationContext,
-                    char : discord.Option(str, choices=characters),
+                    char : discord.Option(str, autocomplete=character_autocomplete),
                     rejoin_queue : discord.Option(bool)):
+        if not self.is_valid_char(char):
+            await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
+            return
         await ctx.defer()
 
         #check if q open
@@ -548,10 +556,16 @@ class Danisen(commands.Cog):
     @discord.commands.default_permissions(send_polls=True)
     async def report_match(self, ctx : discord.ApplicationContext,
                         player1_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char1 : discord.Option(str, choices=characters),
+                        char1 : discord.Option(str, autocomplete=character_autocomplete),
                         player2_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char2 : discord.Option(str, choices=characters),
+                        char2 : discord.Option(str, autocomplete=character_autocomplete),
                         winner : discord.Option(str, choices=players)):
+        if not self.is_valid_char(char1):
+            await ctx.respond(f"Invalid char1 selected {char1}. Please choose a valid char1.")
+            return
+        if not self.is_valid_char(char2):
+            await ctx.respond(f"Invalid char2 selected {char2}. Please choose a valid char2.")
+            return
         res = self.database_cur.execute(f"SELECT * FROM players WHERE player_name='{player1_name}' AND character='{char1}'")
         player1 = res.fetchone()
         res = self.database_cur.execute(f"SELECT * FROM players WHERE player_name='{player2_name}' AND character='{char2}'")
