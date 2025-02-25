@@ -110,6 +110,8 @@ class Danisen(commands.Cog):
 
         rankdown = False
         rankup = False
+        
+        rankup_points = 3 if winner_rank[0] <= 7 else 5
 
         #winning if you are more than the maximum_rank_difference you gain nothing
         if winner_rank[0] > loser_rank[0] + self.maximum_rank_difference:
@@ -129,16 +131,16 @@ class Danisen(commands.Cog):
         elif loser_rank[1] > 0:
             loser_rank[1] -= 1
 
-        #rankup logic (normal ranks promote at +3)
-        if winner_rank[1] >= 3:
+        #rankup logic (normal ranks promote at +3) (special at +5)
+        if winner_rank[1] >= rankup_points:
             winner_rank[0] += 1
             if self.point_rollover:
-                winner_rank[1] = winner_rank[1] % 3
+                winner_rank[1] = winner_rank[1] % rankup_points
             else:
                 winner_rank[1] = 0
             rankup = True
 
-        #rankdown logic (normal ranks demote at -3)
+        #rankdown logic (ranks demote at -3)
         if loser_rank[1] <= -3:
             loser_rank[0] -= 1
             loser_rank[1] = 0
