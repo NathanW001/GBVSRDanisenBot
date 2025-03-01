@@ -628,6 +628,31 @@ class Danisen(commands.Cog):
         paginator = pages.Paginator(pages=page_list)
         await paginator.respond(ctx.interaction, ephemeral=False)
 
+    @discord.commands.slash_command(description="See various statistics about the danisen")
+    async def danisen_stats(self, ctx : discord.ApplicationContext):
+        res = self.database_cur.execute(("SELECT character, COUNT(*) as count "
+                                        "FROM players "
+                                        "GROUP BY character "
+                                        "ORDER BY character;"))
+        char_count = res.fetchall()
+        res = self.database_cur.execute(("SELECT dan, COUNT(*) as count "
+                                        "FROM players "
+                                        "GROUP BY dan "
+                                        "ORDER BY dan;"))
+        dan_count = res.fetchall()
+        page_list = []
+        em = discord.Embed(title=f"Character Stats")
+        page_list.append(em)
+        for char in char_count:
+            em.add_field(name=f"{char['character']}", value=f"Count : {char['count']}")
+        em = discord.Embed(title=f"Dan Stats")
+        page_list.append(em)
+        for dan in dan_count:
+            em.add_field(name=f"Dan {dan['dan']}", value=f"Count : {dan['count']}")
+        paginator = pages.Paginator(pages=page_list)
+        await paginator.respond(ctx.interaction, ephemeral=False)
+
+
     @discord.commands.slash_command(description="See the top players")
     async def leaderboard(self, ctx : discord.ApplicationContext):
         res = self.database_cur.execute(f"SELECT * FROM players ORDER BY dan DESC, points DESC")
