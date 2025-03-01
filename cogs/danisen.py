@@ -56,21 +56,19 @@ class Danisen(commands.Cog):
         ###################################################
         #SET ALL CONFIG VALUES 
 
-        if (config['ACTIVE_MATCHES_CHANNEL_ID']):
-            self.ACTIVE_MATCHES_CHANNEL_ID = int(config['ACTIVE_MATCHES_CHANNEL_ID'])
-        else:
-            self.ACTIVE_MATCHES_CHANNEL_ID = 0
         
-        if 'REPORTED_MATCHES_CHANNEL_ID' in config and config['REPORTED_MATCHES_CHANNEL_ID']:
-            self.REPORTED_MATCHES_CHANNEL_ID = int(config['REPORTED_MATCHES_CHANNEL_ID'])
-        else:
-            self.REPORTED_MATCHES_CHANNEL_ID = 0
+        self.ACTIVE_MATCHES_CHANNEL_ID = int(config['ACTIVE_MATCHES_CHANNEL_ID']) if (config['ACTIVE_MATCHES_CHANNEL_ID']) else 0
+        self.REPORTED_MATCHES_CHANNEL_ID = int(config['REPORTED_MATCHES_CHANNEL_ID']) if 'REPORTED_MATCHES_CHANNEL_ID' in config and config['REPORTED_MATCHES_CHANNEL_ID'] else 0
 
         self.total_dans = config['total_dans']
         #cannot rank down if ur dan is <= minimum_derank
         self.minimum_derank = config['minimum_derank']
         #if your rank difference is greater  than maximum rank diff you can no points (e.g. max diff of 2, and rank 4 vs  rank 1)
         self.maximum_rank_difference = config['maximum_rank_difference']
+
+        #The minimal gap required for the lower ranked player to gain 2 points on a win
+        self.rank_gap_for_more_points = config['rank_gap_for_more_points'] if 'rank_gap_for_more_points' in config else 1
+
         #if point_rollover is enabled then if we have a dan1 with 2 points, that gains 2 points, they will be (dan 2, 1 point) after
         #without rollover they are only (dan 2, 0 points)
         self.point_rollover = config['point_rollover']
@@ -117,12 +115,12 @@ class Danisen(commands.Cog):
         if winner_rank[0] > loser_rank[0] + self.maximum_rank_difference:
             return winner_rank, loser_rank
 
-        if winner_rank[0] >= loser_rank[0]:
-            #higher ranked player gains 1 point at most
-            winner_rank[1] += 1
-        else:
-            #lower ranked player gains 2 points
+        if winner_rank[0] <= loser_rank[0] + self.rank_gap_for_more_points:
+            #lower ranked player gains 2 point at most if rank gap is big enough
             winner_rank[1] += 2
+        else:
+            #higher ranked player gains 1 points
+            winner_rank[1] += 1
 
         #minimum rank has different rules to clamp the points lost e.g. (min for dan1 is (dan 1, 0 point), min for other dans is -2 pts)
         if loser_rank[0] > self.minimum_derank:

@@ -45,6 +45,7 @@ default_config_dict = {
     "total_dans": 7,
     "minimum_derank": 2,
     "maximum_rank_difference": 1,
+    "rank_gap_for_more_points": 1,
     "point_rollover": True,
     "queue_status": True
 }
@@ -136,6 +137,10 @@ class ConfigTab(QWidget):
         self.maximum_rank_difference.setRange(1,11)
         self.maximum_rank_difference.setValue(2)
 
+        self.rank_gap_for_more_points = QSpinBox()
+        self.rank_gap_for_more_points.setRange(1,11)
+        self.rank_gap_for_more_points.setValue(1)
+
         self.point_rollover = QCheckBox()
         self.point_rollover.setToolTip("whether point gains roll over on rank up")
 
@@ -149,6 +154,7 @@ class ConfigTab(QWidget):
         self.config_form_layout.addRow("Total Dans:", self.total_dans)
         self.config_form_layout.addRow("Minimum Derank:", self.minimum_derank)
         self.config_form_layout.addRow("Maximum Rank Difference:", self.maximum_rank_difference)
+        self.config_form_layout.addRow("Rank Gap for More Points:", self.rank_gap_for_more_points)
 
         #add checkboxes
         self.config_form_layout.addRow("Point Rollover:",  self.point_rollover)
@@ -182,6 +188,7 @@ class ConfigTab(QWidget):
             "total_dans" : self.total_dans.value(),
             "minimum_derank" : self.minimum_derank.value(),
             "maximum_rank_difference" : self.maximum_rank_difference.value(),
+            "rank_gap_for_more_points" : self.rank_gap_for_more_points.value(),
             #Bools
             "point_rollover" : self.point_rollover.isChecked(),
             "queue_status" :  self.queue_status.isChecked()
@@ -197,6 +204,7 @@ class ConfigTab(QWidget):
         self.total_dans.setValue(config.get("total_dans", 7))
         self.minimum_derank.setValue(config.get("minimum_derank", 2))
         self.maximum_rank_difference.setValue(config.get("maximum_rank_difference", 1))
+        self.rank_gap_for_more_points.setValue(config.get("rank_gap_for_more_points", 1))
         #Bools
         self.point_rollover.setChecked(config.get("point_rollover", True))
         self.queue_status.setChecked(config.get("queue_status", True))
@@ -330,7 +338,7 @@ class AdminTab(QWidget):
         self.logger.info("-" * 50)
         
         for col in columns:
-            cid, name, type_, notnull, default, pk = col
+            _, name, type_, notnull, default, pk = col
             self.logger.info(f"{name:<20} {type_:<10} {'No' if notnull else 'Yes':<10} {'Yes' if pk else 'No':<12} {default}")
     
         cursor.execute(f"""
