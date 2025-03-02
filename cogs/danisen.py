@@ -115,7 +115,7 @@ class Danisen(commands.Cog):
         if winner_rank[0] > loser_rank[0] + self.maximum_rank_difference:
             return winner_rank, loser_rank
 
-        if winner_rank[0] <= loser_rank[0] + self.rank_gap_for_more_points:
+        if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points:
             #lower ranked player gains 2 point at most if rank gap is big enough
             winner_rank[1] += 2
         else:
