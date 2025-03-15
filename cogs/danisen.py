@@ -639,9 +639,13 @@ class Danisen(commands.Cog):
                                         "ORDER BY dan;"))
         dan_count = res.fetchall()
         page_list = []
-        em = discord.Embed(title=f"Character Stats")
+        em = discord.Embed(title=f"Character Stats 1/2")
         page_list.append(em)
-        for char in char_count:
+        for char in char_count[:13]:
+            em.add_field(name=f"{char['character']}", value=f"Count : {char['count']}")
+        em = discord.Embed(title=f"Character Stats 2/2")
+        page_list.append(em)
+        for char in char_count[13:]:
             em.add_field(name=f"{char['character']}", value=f"Count : {char['count']}")
         em = discord.Embed(title=f"Dan Stats")
         page_list.append(em)
