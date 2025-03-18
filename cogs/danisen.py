@@ -30,6 +30,7 @@ class Danisen(commands.Cog):
 
         self.dans_in_queue = {dan:[] for dan in range(1,self.total_dans+1)}
         self.matchmaking_queue = []
+
         self.max_active_matches = 3
         self.cur_active_matches = 0
 
@@ -91,15 +92,15 @@ class Danisen(commands.Cog):
             await ctx.respond(f"The matchmaking queue has been enabled")
 
 
-    def dead_role(self,ctx, player):
+    def dead_role(self, ctx, player):
         role = None
 
         self.logger.info(f'Checking if dan should be removed as well')
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan={player['dan']}")
         remaining_daniel = res.fetchone()
         if not remaining_daniel:
-            self.logger.info(f'Dan role {player['dan']} will be removed')
-            role = (discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}"))
+            self.logger.info(f"Dan role {player['dan']} will be removed")
+            role = discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}")
             return role
 
     async def score_update(self, ctx, winner, loser):
@@ -429,10 +430,10 @@ class Danisen(commands.Cog):
 
     def rejoin_queue(self, player):
         if self.queue_status == False:
-            self.logger.info(f"q is closed so no rejoin")
+            self.logger.info("q is closed so no rejoin")
             return
 
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player["discord_id"]} AND character='{player["character"]}'")
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND character='{player['character']}'")
         player = res.fetchone()
         player = DanisenRow(player)
         player['requeue'] = True
@@ -531,25 +532,28 @@ class Danisen(commands.Cog):
                  self.logger.info(f"we readded daniel1 {daniel1} and are breaking from matchmake")
                  break
 
-    async def create_match_interaction(self, ctx : discord.Interaction,
-                                       daniel1, daniel2):
+    async def create_match_interaction(self, ctx: discord.Interaction, daniel1, daniel2):
         self.cur_active_matches += 1
         view = MatchView(self, daniel1, daniel2)
-        id1 = f'<@{daniel1['discord_id']}>'
-        id2 = f'<@{daniel2['discord_id']}>'
+        id1 = f"<@{daniel1['discord_id']}>"
+        id2 = f"<@{daniel2['discord_id']}>"
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
-            webhook_msg = await channel.send(f"{id1} {daniel1['character']} dan {daniel1['dan']} points {daniel1['points']} vs {id2} {daniel2['character']} dan {daniel2['dan']} points {daniel2['points']} "+
-                                         "\n Note only players in the match can report it! (and admins)", view=view)
+            webhook_msg = await channel.send(
+                f"{id1} {daniel1['character']} dan {daniel1['dan']} points {daniel1['points']} vs {id2} {daniel2['character']} dan {daniel2['dan']} points {daniel2['points']} "
+                "\n Note only players in the match can report it! (and admins)",
+                view=view,
+            )
             await webhook_msg.pin()
 
-            #deleting the pin added system message (checking last 5 messages incase some other stuff was posted in the channel in the meantime)
+            # deleting the pin added system message (checking last 5 messages incase some other stuff was posted in the channel in the meantime)
             async for message in channel.history(limit=5):
                 if message.type == discord.MessageType.pins_add:
                     await message.delete()
         else:
-            await ctx.respond(f"""Could not find channel to send match message to (could be an issue with channel id {self.ACTIVE_MATCHES_CHANNEL_ID} or bot permissions)""")
-
+            await ctx.respond(
+                f"Could not find channel to send match message to (could be an issue with channel id {self.ACTIVE_MATCHES_CHANNEL_ID} or bot permissions)"
+            )
 
     #report match score
     @discord.commands.slash_command(description="Report a match score")
