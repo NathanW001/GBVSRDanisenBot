@@ -3,6 +3,8 @@ from discord.ext import commands, pages
 from cogs.database import *
 from cogs.custom_views import *
 import os
+from collections import deque  # Ensure deque is imported
+
 class Danisen(commands.Cog):
     characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki","Ogre"]
     players = ["player1", "player2"]
@@ -28,8 +30,8 @@ class Danisen(commands.Cog):
         self.database_cur = self.database_con.cursor()
         self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points,   PRIMARY KEY (discord_id, character) )")
 
-        self.dans_in_queue = {dan:[] for dan in range(1,self.total_dans+1)}
-        self.matchmaking_queue = []
+        self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Use deque for dans_in_queue
+        self.matchmaking_queue = deque()  # Use deque for matchmaking_queue
 
         self.max_active_matches = 3
         self.cur_active_matches = 0
@@ -83,8 +85,8 @@ class Danisen(commands.Cog):
                         queue_status : discord.Option(bool)):
         self.queue_status = queue_status
         if queue_status == False:
-            self.matchmaking_queue = []
-            self.dans_in_queue = {dan:[] for dan in range(1,self.total_dans+1)}
+            self.matchmaking_queue.clear()  # Clear the deque
+            self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Reset to empty deques
             self.in_queue = {}
             self.in_match = {}
             await ctx.respond(f"The matchmaking queue has been disabled")
@@ -346,20 +348,20 @@ class Danisen(commands.Cog):
     async def leave_queue(self, ctx : discord.ApplicationContext):
         name = ctx.author.name
         self.logger.info(f'leave queue called for {name}')
-        daniel = None
-        for i, member in enumerate(self.matchmaking_queue):
+        daniel = None 
+
+        for member in self.matchmaking_queue:
             if member and (member['player_name'] == name):
-                self.logger.info(f'found {name} in MMQ')
-                daniel = self.matchmaking_queue.pop(i)
-                self.logger.info(f"removed {name} from MMQ {self.matchmaking_queue}")
-        
+                self.matchmaking_queue.remove(member)  # Remove from deque
+                daniel = member
+                self.logger.info(f"removed {name} from MMQ {list(self.matchmaking_queue)}")
+                break
+
         if daniel:
-            for i, member in enumerate(self.dans_in_queue[daniel['dan']]):
-                if member['player_name'] == name:
-                    self.logger.info(f'found {name} in Danq')
-                    daniel = self.dans_in_queue[daniel['dan']].pop(i)
-                    self.logger.info(f"removed {name} from DanQ {self.dans_in_queue[daniel['dan']]}")
-            
+            if daniel in self.dans_in_queue[daniel['dan']]:
+                self.dans_in_queue[daniel['dan']].remove(daniel)  # Remove from deque
+                self.logger.info(f"removed {name} from DanQ {list(self.dans_in_queue[daniel['dan']])}")
+
             self.in_queue[daniel['player_name']][0] = False
             await ctx.respond("You have been removed from the queue")
         else:
@@ -456,7 +458,7 @@ class Danisen(commands.Cog):
     async def matchmake(self, ctx : discord.Interaction):
         while (self.cur_active_matches < self.max_active_matches and
                 len(self.matchmaking_queue) >= 2):
-            daniel1 = self.matchmaking_queue.pop(0)
+            daniel1 = self.matchmaking_queue.popleft()  # Pop from the left of the deque
             if not daniel1:
                 continue
 
@@ -465,7 +467,7 @@ class Danisen(commands.Cog):
             self.logger.info(f"in_queue {self.in_queue}")
 
 
-            same_daniel = self.dans_in_queue[daniel1['dan']].pop(0)
+            same_daniel = self.dans_in_queue[daniel1['dan']].popleft()  # Pop from the left of the deque
             #sanity check that this is also the latest daniel in the respective dan queue
             if daniel1 != same_daniel:
                 self.logger.error(f"Somethings gone very wrong... daniel queues are not synchronized {daniel1=} {same_daniel=}")
@@ -526,8 +528,8 @@ class Danisen(commands.Cog):
                 self.in_queue[old_daniel['player_name']][0] = True
                 self.logger.info(f"we readded daniel2 {old_daniel}")
             if not matchmade:
-                 self.matchmaking_queue.append(daniel1)
-                 self.dans_in_queue[daniel1['dan']].append(daniel1)
+                 self.matchmaking_queue.append(daniel1)  # Append back to the deque
+                 self.dans_in_queue[daniel1['dan']].append(daniel1)  # Append back to the deque
                  self.in_queue[daniel1['player_name']][0] = True
                  self.logger.info(f"we readded daniel1 {daniel1} and are breaking from matchmake")
                  break
