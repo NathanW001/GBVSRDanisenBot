@@ -584,33 +584,26 @@ class Danisen(commands.Cog):
     async def dan(self, ctx: discord.ApplicationContext,
                   dan: discord.Option(int, min_value=DEFAULT_DAN, max_value=MAX_DAN_RANK)):
         daniels = self.get_players_by_dan(dan)
-        page_list = []
-        em = discord.Embed(title=f"Dan {dan}", colour=self.dan_colours[dan - 1])
-        page_list.append(em)
-        page_size = 0
-        for daniel in daniels:
-            page_size += 1
-            page_list[-1].add_field(
-                name=f"{daniel['player_name']} {daniel['character']}",
-                value=f"Dan : {daniel['dan']} Points: {daniel['points']}"
-            )
-            if page_size == 10:
-                em = discord.Embed(title=f"Dan {dan}", colour=self.dan_colours[dan - 1])
-                page_list.append(em)
-                page_size = 0
-        paginator = pages.Paginator(pages=page_list)
+        data = [
+            {
+                "name": f"{daniel['player_name']} {daniel['character']}",
+                "value": f"Dan: {daniel['dan']} Points: {daniel['points']}"
+            }
+            for daniel in daniels
+        ]
+        embeds = self.create_paginated_embeds(f"Dan {dan}", data, MAX_FIELDS_PER_EMBED, colour=self.dan_colours[dan - 1])
+        paginator = pages.Paginator(pages=embeds)
+
         await paginator.respond(ctx.interaction, ephemeral=False)
 
     # Add a helper function for paginated embeds
     def create_paginated_embeds(self, title, data, fields_per_page, colour=None):
         """Helper function to create paginated embeds."""
         page_list = []
-        print(len(data))
-        print(fields_per_page)
         total_pages = (len(data) // fields_per_page) + 1
         items_per_page = len(data) // total_pages
         for page in range(total_pages):
-            em = discord.Embed(title=f"{title} {page + 1}/{total_pages}", colour=colour)
+            em = discord.Embed(title=f"({title} {page + 1}/{total_pages})", colour=colour)
             page_list.append(em)
             for idx in range(page * items_per_page, min((page + 1) * items_per_page, len(data))):
                 em.add_field(name=f"{data[idx]['name']}", value=f"{data[idx]['value']}")

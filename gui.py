@@ -10,23 +10,6 @@ from io import StringIO
 import logging
 import shutil
 
-logging.basicConfig(
-    filename='bot.log',
-    filemode='w',
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-def handle_exception(exc_type, exc_value, exc_traceback):
-    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-
-sys.excepthook = handle_exception
-
-# Create a logger for stderr
-stderr_logger = logging.getLogger('stderr')
-stderr_logger.setLevel(logging.DEBUG)
-
-
 # Create our custom stderr that redirects to logging
 class LoggedStderr:
     def write(self, msg):
@@ -35,6 +18,25 @@ class LoggedStderr:
     
     def flush(self):
         pass
+
+# Centralized logging setup
+def setup_logging():
+    logging.basicConfig(
+        filename='bot.log',
+        filemode='w',
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    sys.excepthook = lambda exc_type, exc_value, exc_traceback: logging.error(
+        "Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback)
+    )
+    sys.stderr = LoggedStderr()
+
+setup_logging()
+
+# Create a logger for stderr
+stderr_logger = logging.getLogger('stderr')
+stderr_logger.setLevel(logging.DEBUG)
 
 sys.stderr = LoggedStderr()
 
@@ -49,6 +51,17 @@ default_config_dict = {
     "point_rollover": True,
     "queue_status": True
 }
+
+# Utility functions for configuration management
+def load_config(file_path, default_config):
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    return default_config
+
+def save_config(file_path, config):
+    with open(file_path, 'w') as f:
+        json.dump(config, f, indent=4)
 
 class MainTab(QWidget):
     def __init__(self, bot):
@@ -89,21 +102,15 @@ class MainTab(QWidget):
     async def start_bot(self):
         self.logger.info("start_bot")
         try:
-            if os.path.exists("config.json"):
-                with open("config.json", 'r') as f:
-                    config = json.load(f)
+            config = load_config("config.json", default_config_dict)
+            token = config['bot_token']
+            await self.bot.start(token)
         except Exception as e:
-            self.logger.warning("Warning", f"Failed to load configuration: {str(e)}")
-        token = config['bot_token']
-        await self.bot.start(token)
-
+            self.logger.error(f"Failed to start bot: {str(e)}")
 
     async def stop_bot(self):
         self.logger.info("stop_bot")
         await self.bot.close()
-
-
-
 
 class ConfigTab(QWidget):
     def __init__(self, bot):
@@ -213,8 +220,7 @@ class ConfigTab(QWidget):
         """Save configuration to file"""
         try:
             config = self.get_config_dict()
-            with open(self.settings_file, 'w') as f:
-                json.dump(config, f, indent=4)
+            save_config(self.settings_file, config)
 
             update_bot_config(self.bot)
             QMessageBox.information(self, "Success", "Configuration saved successfully!")
@@ -224,10 +230,8 @@ class ConfigTab(QWidget):
     def load_config(self):
         """Load configuration from file"""
         try:
-            if os.path.exists(self.settings_file):
-                with open(self.settings_file, 'r') as f:
-                    config = json.load(f)
-                self.set_config_dict(config)
+            config = load_config(self.settings_file, default_config_dict)
+            self.set_config_dict(config)
         except Exception as e:
             QMessageBox.warning(self, "Warning", f"Failed to load configuration: {str(e)}")
 
@@ -322,33 +326,23 @@ class AdminTab(QWidget):
             "",
             "Database Files (*.db);;All Files (*)"
         )
-
         if file_path:
-            shutil.copy("danisen.db", file_path)
-            self.logger.info(f"danisen.db file copied to {file_path}")
+            try:
+                shutil.copy("danisen.db", file_path)
+                self.logger.info(f"danisen.db file copied to {file_path}")
+                self._reset_player_data()
+            except Exception as e:
+                self.logger.error(f"Failed to reset season: {str(e)}")
 
+    def _reset_player_data(self):
         cursor = self.con.cursor()
-        cursor.execute(f"PRAGMA table_info(players)")
-        columns = cursor.fetchall()
-        
-        # Print column information
-        self.logger.info(f"\nStructure for table 'players':")
-        self.logger.info("-" * 50)
-        self.logger.info(f"{'Column Name':<20} {'Type':<10} {'Nullable':<10} {'Primary Key':<12}")
-        self.logger.info("-" * 50)
-        
-        for col in columns:
-            _, name, type_, notnull, default, pk = col
-            self.logger.info(f"{name:<20} {type_:<10} {'No' if notnull else 'Yes':<10} {'Yes' if pk else 'No':<12} {default}")
-    
-        cursor.execute(f"""
+        cursor.execute("""
             UPDATE players
-            SET 
-                dan = ?,
-                points = ?
-        """, (1,0))
-
+            SET dan = ?, points = ?
+        """, (1, 0))
         self.con.commit()
+        self.logger.info("Player data reset successfully.")
+
 class DanisenWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -360,11 +354,8 @@ class DanisenWindow(QMainWindow):
 
         #Create config file if non-existant
         self.settings_file = "config.json"
-        try:
-            with open(self.settings_file, 'x') as f:
-                json.dump(default_config_dict, f, indent=4)
-        except FileExistsError:
-            self.logger.info(f"The file '{self.settings_file}' already exists")
+        if not os.path.exists(self.settings_file):
+            save_config(self.settings_file, default_config_dict)
 
         #Creating DanisenBot
         self.bot = create_bot(self.con)
@@ -392,7 +383,6 @@ class DanisenWindow(QMainWindow):
 
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
         self.setWindowIcon(icon)
-
 
 def main():
     app = QApplication(sys.argv)
