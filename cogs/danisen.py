@@ -7,7 +7,6 @@ from collections import deque  # Ensure deque is imported
 
 # Constants
 MAX_FIELDS_PER_EMBED = 25
-MAX_FIELDS_PER_PAGE = 10
 MAX_DAN_RANK = 12
 SPECIAL_RANK_THRESHOLD = 7
 RANKUP_POINTS_NORMAL = 3
@@ -640,54 +639,47 @@ class Danisen(commands.Cog):
         paginator = pages.Paginator(pages=page_list)
         await paginator.respond(ctx.interaction, ephemeral=False)
 
-    @discord.commands.slash_command(description="See various statistics about the danisen")
-    async def danisen_stats(self, ctx : discord.ApplicationContext):
-        res = self.database_cur.execute(("SELECT character, COUNT(*) as count "
-                                        "FROM players "
-                                        "GROUP BY character "
-                                        "ORDER BY character;"))
-        char_count = res.fetchall()
-        res = self.database_cur.execute(("SELECT dan, COUNT(*) as count "
-                                        "FROM players "
-                                        "GROUP BY dan "
-                                        "ORDER BY dan;"))
-        dan_count = res.fetchall()
+    # Add a helper function for paginated embeds
+    def create_paginated_embeds(self, title, data, fields_per_page, colour=None):
+        """Helper function to create paginated embeds."""
         page_list = []
-        #split characters evenly across pages, theres a maximum of 25 fields per embed
-        total_pages = (len(char_count)//MAX_FIELDS_PER_EMBED) + 1
-        characters_per_page = len(char_count)//total_pages
+        print(len(data))
+        print(fields_per_page)
+        total_pages = (len(data) // fields_per_page) + 1
+        items_per_page = len(data) // total_pages
         for page in range(total_pages):
-            em = discord.Embed(title=f"Character Stats {page+1}/{total_pages}")
+            em = discord.Embed(title=f"{title} {page + 1}/{total_pages}", colour=colour)
             page_list.append(em)
-            for idx in range(page * characters_per_page, min((page + 1) * characters_per_page, len(char_count))):
-                em.add_field(name=f"{char_count[idx]['character']}", value=f"Count : {char_count[idx]['count']}")
+            for idx in range(page * items_per_page, min((page + 1) * items_per_page, len(data))):
+                em.add_field(name=f"{data[idx]['name']}", value=f"{data[idx]['value']}")
+        return page_list
 
-        em = discord.Embed(title=f"Dan Stats")
-        page_list.append(em)
-        for dan in dan_count:
-            em.add_field(name=f"Dan {dan['dan']}", value=f"Count : {dan['count']}")
-        paginator = pages.Paginator(pages=page_list)
+    # Refactor danisen_stats to use the helper function
+    @discord.commands.slash_command(description="See various statistics about the danisen")
+    async def danisen_stats(self, ctx: discord.ApplicationContext):
+        char_count = self.database_cur.execute(
+            "SELECT character AS name, COUNT(*) AS value FROM players GROUP BY character ORDER BY character"
+        ).fetchall()
+        dan_count = self.database_cur.execute(
+            "SELECT dan AS name, COUNT(*) AS value FROM players GROUP BY dan ORDER BY dan"
+        ).fetchall()
+
+        char_pages = self.create_paginated_embeds("Character Stats", char_count, MAX_FIELDS_PER_EMBED)
+        dan_pages = self.create_paginated_embeds("Dan Stats", dan_count, MAX_FIELDS_PER_EMBED, colour=discord.Color.blurple())
+
+        paginator = pages.Paginator(pages=char_pages + dan_pages)
         await paginator.respond(ctx.interaction, ephemeral=False)
 
-
+    # Refactor leaderboard to use the helper function
     @discord.commands.slash_command(description="See the top players")
-    async def leaderboard(self, ctx : discord.ApplicationContext):
-        res = self.database_cur.execute(f"SELECT * FROM players ORDER BY dan DESC, points DESC")
-        daniels = res.fetchall()
-        page_list = []
-        page_num = 1
-        em = discord.Embed(title=f"Top Daniels {page_num}")
-        page_list.append(em)
-        page_size = 0
-        for daniel in daniels:
-            page_size += 1
-            page_list[-1].add_field(name=f"{daniel['player_name']} {daniel['character']}", value=f"Dan : {daniel['dan']} Points: {daniel['points']}")
-            if page_size == MAX_FIELDS_PER_PAGE:
-                page_num += 1
-                em = discord.Embed(title=f"Top Daniels {page_num}")
-                page_list.append(em)
-                page_size = 0
-        paginator = pages.Paginator(pages=page_list)
+    async def leaderboard(self, ctx: discord.ApplicationContext):
+        daniels = self.database_cur.execute(
+            "SELECT player_name || ' ' || character AS name, 'Dan: ' || dan || ' Points: ' || points AS value "
+            "FROM players ORDER BY dan DESC, points DESC"
+        ).fetchall()
+
+        leaderboard_pages = self.create_paginated_embeds("Top Daniels", daniels, MAX_FIELDS_PER_EMBED)
+        paginator = pages.Paginator(pages=leaderboard_pages)
         await paginator.respond(ctx.interaction, ephemeral=False)
 
     @discord.commands.slash_command(description="Update max matches for the queue system (Admin Cmd)")
