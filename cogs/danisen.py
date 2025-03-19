@@ -491,7 +491,7 @@ class Danisen(commands.Cog):
             matchmade = False
             for dan in check_dan:
                 if self.dans_in_queue[dan]:
-                    daniel2 = self.dans_in_queue[dan].pop(0)
+                    daniel2 = self.dans_in_queue[dan].popleft()
                     if self.in_queue[daniel1['player_name']][1] == daniel2['player_name']:
                         #same match would occur, find different opponent
                         self.logger.info(f"Same match would occur but prevented {daniel1} vs {daniel2}")
@@ -520,12 +520,12 @@ class Danisen(commands.Cog):
                     break
             if old_daniel:
                 #readding old daniel back into the q
-                self.dans_in_queue[old_daniel['dan']].insert(0, old_daniel)
+                self.dans_in_queue[old_daniel['dan']].appendleft(old_daniel)
                 self.in_queue[old_daniel['player_name']][0] = True
                 self.logger.info(f"we readded daniel2 {old_daniel}")
             if not matchmade:
-                 self.matchmaking_queue.append(daniel1)  # Append back to the deque
-                 self.dans_in_queue[daniel1['dan']].append(daniel1)  # Append back to the deque
+                 self.matchmaking_queue.appendleft(daniel1)  # Append back to the deque
+                 self.dans_in_queue[daniel1['dan']].appendleft(daniel1)  # Append back to the deque
                  self.in_queue[daniel1['player_name']][0] = True
                  self.logger.info(f"we readded daniel1 {daniel1} and are breaking from matchmake")
                  break
