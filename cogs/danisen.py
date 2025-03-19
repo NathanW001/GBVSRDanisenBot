@@ -5,6 +5,17 @@ from cogs.custom_views import *
 import os
 from collections import deque  # Ensure deque is imported
 
+# Constants
+MAX_FIELDS_PER_EMBED = 25
+MAX_FIELDS_PER_PAGE = 10
+MAX_DAN_RANK = 12
+SPECIAL_RANK_THRESHOLD = 7
+RANKUP_POINTS_NORMAL = 3
+RANKUP_POINTS_SPECIAL = 5
+RANKDOWN_POINTS = -3
+DEFAULT_DAN = 1
+DEFAULT_POINTS = 0
+
 class Danisen(commands.Cog):
     characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki","Ogre"]
     players = ["player1", "player2"]
@@ -60,22 +71,18 @@ class Danisen(commands.Cog):
         #SET ALL CONFIG VALUES 
 
         
-        self.ACTIVE_MATCHES_CHANNEL_ID = int(config['ACTIVE_MATCHES_CHANNEL_ID']) if (config['ACTIVE_MATCHES_CHANNEL_ID']) else 0
-        self.REPORTED_MATCHES_CHANNEL_ID = int(config['REPORTED_MATCHES_CHANNEL_ID']) if 'REPORTED_MATCHES_CHANNEL_ID' in config and config['REPORTED_MATCHES_CHANNEL_ID'] else 0
+        self.ACTIVE_MATCHES_CHANNEL_ID = int(config.get('ACTIVE_MATCHES_CHANNEL_ID', 0))
+        self.REPORTED_MATCHES_CHANNEL_ID = int(config.get('REPORTED_MATCHES_CHANNEL_ID', 0))
 
-        self.total_dans = config['total_dans']
-        #cannot rank down if ur dan is <= minimum_derank
-        self.minimum_derank = config['minimum_derank']
-        #if your rank difference is greater  than maximum rank diff you can no points (e.g. max diff of 2, and rank 4 vs  rank 1)
-        self.maximum_rank_difference = config['maximum_rank_difference']
-
-        #The minimal gap required for the lower ranked player to gain 2 points on a win
-        self.rank_gap_for_more_points = config['rank_gap_for_more_points'] if 'rank_gap_for_more_points' in config else 1
+        self.total_dans = config.get('total_dans', MAX_DAN_RANK)
+        self.minimum_derank = config.get('minimum_derank', DEFAULT_DAN)
+        self.maximum_rank_difference = config.get('maximum_rank_difference', 2)
+        self.rank_gap_for_more_points = config.get('rank_gap_for_more_points', 1)
 
         #if point_rollover is enabled then if we have a dan1 with 2 points, that gains 2 points, they will be (dan 2, 1 point) after
         #without rollover they are only (dan 2, 0 points)
-        self.point_rollover = config['point_rollover']
-        self.queue_status = config['queue_status']
+        self.point_rollover = config.get('point_rollover', True)
+        self.queue_status = config.get('queue_status',True)
 
         ###################################################
 
@@ -112,7 +119,7 @@ class Danisen(commands.Cog):
         rankdown = False
         rankup = False
         
-        rankup_points = 3 if winner_rank[0] <= 7 else 5
+        rankup_points = RANKUP_POINTS_NORMAL if winner_rank[0] <= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_SPECIAL
 
         #winning if you are more than the maximum_rank_difference you gain nothing
         if winner_rank[0] > loser_rank[0] + self.maximum_rank_difference:
@@ -141,10 +148,10 @@ class Danisen(commands.Cog):
                 winner_rank[1] = 0
             rankup = True
 
-        #rankdown logic (ranks demote at -3)
-        if loser_rank[1] <= -3:
+        # Rankdown logic
+        if loser_rank[1] <= RANKDOWN_POINTS:
             loser_rank[0] -= 1
-            loser_rank[1] = 0
+            loser_rank[1] = DEFAULT_POINTS
             rankdown = True
 
         self.logger.info("New Scores")
@@ -235,7 +242,7 @@ class Danisen(commands.Cog):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
             return
 
-        line = (ctx.author.id, player_name, char1, 1, 0)
+        line = (ctx.author.id, player_name, char1, DEFAULT_DAN, DEFAULT_POINTS)
         self.database_cur.execute(
             "INSERT INTO players (discord_id, player_name, character, dan, points) VALUES (?, ?, ?, ?, ?)", 
             line
@@ -478,12 +485,12 @@ class Danisen(commands.Cog):
 
             #creating daniel iterator (the search pattern defined above)
             check_dan = [daniel1['dan']]
-            for dan_offset in range(1, max(self.total_dans-check_dan[0], check_dan[0]-1)):
+            for dan_offset in range(1, max(self.total_dans - check_dan[0], check_dan[0] - DEFAULT_DAN)):
                 cur_dan = check_dan[0] + dan_offset
-                if  1 <= cur_dan <= 7:
+                if DEFAULT_DAN <= cur_dan <= SPECIAL_RANK_THRESHOLD:
                     check_dan.append(cur_dan)
                 cur_dan = check_dan[0] - dan_offset
-                if  1 <= cur_dan <= 7:
+                if DEFAULT_DAN <= cur_dan <= SPECIAL_RANK_THRESHOLD:
                     check_dan.append(cur_dan)
             
             self.logger.info(f"dan queues to check {check_dan}")
@@ -614,7 +621,7 @@ class Danisen(commands.Cog):
 
     @discord.commands.slash_command(description="See players in a specific dan")
     async def dan(self, ctx: discord.ApplicationContext,
-                  dan: discord.Option(int, min_value=1, max_value=12)):
+                  dan: discord.Option(int, min_value=DEFAULT_DAN, max_value=MAX_DAN_RANK)):
         daniels = self.get_players_by_dan(dan)
         page_list = []
         em = discord.Embed(title=f"Dan {dan}", colour=self.dan_colours[dan - 1])
@@ -648,12 +655,16 @@ class Danisen(commands.Cog):
         page_list = []
         em = discord.Embed(title=f"Character Stats 1/2")
         page_list.append(em)
-        for char in char_count[:13]:
-            em.add_field(name=f"{char['character']}", value=f"Count : {char['count']}")
-        em = discord.Embed(title=f"Character Stats 2/2")
-        page_list.append(em)
-        for char in char_count[13:]:
-            em.add_field(name=f"{char['character']}", value=f"Count : {char['count']}")
+        
+        #split characters across pages, theres a maximum of 25 fields per embed
+        total_pages = (len(char_count)//MAX_FIELDS_PER_EMBED) + 1
+        for page in range(total_pages):
+            em = discord.Embed(title=f"Character Stats {page+1}/{total_pages}")
+            page_list.append(em)
+            for char in char_count[page*MAX_FIELDS_PER_EMBED:(page+1)*MAX_FIELDS_PER_EMBED]:
+                em.add_field(name=f"{char['character']}", value=f"Count : {char['count']}")
+        em = discord.Embed(title=f"Character Stats {total_pages}/{total_pages}")
+
         em = discord.Embed(title=f"Dan Stats")
         page_list.append(em)
         for dan in dan_count:
@@ -674,7 +685,7 @@ class Danisen(commands.Cog):
         for daniel in daniels:
             page_size += 1
             page_list[-1].add_field(name=f"{daniel['player_name']} {daniel['character']}", value=f"Dan : {daniel['dan']} Points: {daniel['points']}")
-            if page_size == 10:
+            if page_size == MAX_FIELDS_PER_PAGE:
                 page_num += 1
                 em = discord.Embed(title=f"Top Daniels {page_num}")
                 page_list.append(em)
