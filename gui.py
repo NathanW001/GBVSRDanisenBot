@@ -48,7 +48,7 @@ default_config_dict = {
     "minimum_derank": 2,
     "maximum_rank_difference": 1,
     "rank_gap_for_more_points": 1,
-    "recent_opponents_limit": 5,
+    "recent_opponents_limit": 2,
     "point_rollover": True,
     "queue_status": True
 }
