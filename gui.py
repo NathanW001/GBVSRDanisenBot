@@ -48,6 +48,7 @@ default_config_dict = {
     "minimum_derank": 2,
     "maximum_rank_difference": 1,
     "rank_gap_for_more_points": 1,
+    "recent_opponents_limit": 5,
     "point_rollover": True,
     "queue_status": True
 }
@@ -148,6 +149,11 @@ class ConfigTab(QWidget):
         self.rank_gap_for_more_points.setRange(1,11)
         self.rank_gap_for_more_points.setValue(1)
 
+        self.recent_opponents_limit = QSpinBox()
+        self.recent_opponents_limit.setRange(1, 20)
+        self.recent_opponents_limit.setValue(2)  # Default value
+        self.recent_opponents_limit.setToolTip("Limit of recent opponents to track for matchmaking")
+
         self.point_rollover = QCheckBox()
         self.point_rollover.setToolTip("whether point gains roll over on rank up")
 
@@ -162,6 +168,7 @@ class ConfigTab(QWidget):
         self.config_form_layout.addRow("Minimum Derank:", self.minimum_derank)
         self.config_form_layout.addRow("Maximum Rank Difference:", self.maximum_rank_difference)
         self.config_form_layout.addRow("Rank Gap for More Points:", self.rank_gap_for_more_points)
+        self.config_form_layout.addRow("Recent Opponents Limit:", self.recent_opponents_limit)
 
         #add checkboxes
         self.config_form_layout.addRow("Point Rollover:",  self.point_rollover)
@@ -196,6 +203,7 @@ class ConfigTab(QWidget):
             "minimum_derank" : self.minimum_derank.value(),
             "maximum_rank_difference" : self.maximum_rank_difference.value(),
             "rank_gap_for_more_points" : self.rank_gap_for_more_points.value(),
+            "recent_opponents_limit": self.recent_opponents_limit.value(),  # New parameter
             #Bools
             "point_rollover" : self.point_rollover.isChecked(),
             "queue_status" :  self.queue_status.isChecked()
@@ -215,6 +223,7 @@ class ConfigTab(QWidget):
         #Bools
         self.point_rollover.setChecked(config.get("point_rollover", True))
         self.queue_status.setChecked(config.get("queue_status", True))
+        self.recent_opponents_limit.setValue(config.get("recent_opponents_limit", 5))  # New parameter
 
     def save_config(self):
         """Save configuration to file"""

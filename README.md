@@ -9,6 +9,8 @@ This bot uses Pycord and not Discord.py to clarify (these packages have the same
 
 (Note if you already have discord.py installed you will need to uninstall it in order for pycord to work)
 
+Config/Commands doc https://docs.google.com/document/d/16CrT_AOJmOKWk9pmaS8l0-4vp5s0WmMwmtHSh1jSET8/edit?usp=sharing
+
 # RUNNING BOT THROUGH PY FILE
 # Installation
 git clone https://github.com/dlotfi2/DanisenBot

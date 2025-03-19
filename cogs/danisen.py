@@ -46,7 +46,8 @@ class Danisen(commands.Cog):
         self.max_active_matches = 3
         self.cur_active_matches = 0
 
-        #dict with following format player_name:[in_queue, last_played_player_name]
+        self.recent_opponents_limit = 3  # Default value, configurable via config
+        # dict with format player_name: [in_queue, deque of last played player names]
         self.in_queue = {}
         #dict with following format player_name:in_match
         self.in_match = {}
@@ -82,6 +83,7 @@ class Danisen(commands.Cog):
         #without rollover they are only (dan 2, 0 points)
         self.point_rollover = config.get('point_rollover', True)
         self.queue_status = config.get('queue_status',True)
+        self.recent_opponents_limit = config.get('recent_opponents_limit', 2)
 
         ###################################################
 
@@ -402,7 +404,7 @@ class Danisen(commands.Cog):
             await ctx.respond(f"You are in an active match and cannot queue up")
             return
 
-        self.in_queue.setdefault(ctx.author.name, [True, None])
+        self.in_queue.setdefault(ctx.author.name, [True, deque(maxlen=self.recent_opponents_limit)])
         self.in_match.setdefault(ctx.author.name, False)
 
         self.dans_in_queue[daniel['dan']].append(daniel)
@@ -442,19 +444,12 @@ class Danisen(commands.Cog):
             self.in_queue[daniel1['player_name']][0] = False
 
             same_daniel = self.dans_in_queue[daniel1['dan']].popleft()  # Pop from the left of the deque
-            #sanity check that this is also the latest daniel in the respective dan queue
+            # Sanity check that this is also the latest daniel in the respective dan queue
             if daniel1 != same_daniel:
                 self.logger.error(f"Queue desynchronization detected: {daniel1=} {same_daniel=}")
                 return
             
-            #iterate through daniel queues to find suitable opponent
-            #will search through queues for an opponent closest in dan prioritizing higher dan
-            #x, x+1, x-1, x+2, x-2 etc.
-            #e.g. for a dan 3 player we will search the queues as follows
-            #3, 4, 2, 5, 1, 6, 7
-            #(defaults to ascending order or descending order once out of dans lower or higher resp.)
-
-            #creating daniel iterator (the search pattern defined above)
+            # Iterate through daniel queues to find a suitable opponent
             check_dan = [daniel1['dan']]
             for dan_offset in range(1, max(self.total_dans - check_dan[0], check_dan[0] - DEFAULT_DAN)):
                 cur_dan = check_dan[0] + dan_offset
@@ -464,39 +459,41 @@ class Danisen(commands.Cog):
                 if DEFAULT_DAN <= cur_dan <= SPECIAL_RANK_THRESHOLD:
                     check_dan.append(cur_dan)
             
-            old_daniel = None
+            old_daniels = []  # List to track multiple old_daniel instances
             matchmade = False
             for dan in check_dan:
                 if self.dans_in_queue[dan]:
                     daniel2 = self.dans_in_queue[dan].popleft()
-                    if self.in_queue[daniel1['player_name']][1] == daniel2['player_name']:
-                        #same match would occur, find different opponent
-                        old_daniel = daniel2
+                    if daniel2['player_name'] in self.in_queue[daniel1['player_name']][1]:
+                        # Skip if daniel2 is in daniel1's recent opponents
+                        old_daniels.append(daniel2)
                         continue
-                    
-                    self.in_queue[daniel2['player_name']] = [False, daniel1['player_name']]
-                    self.in_queue[daniel1['player_name']] = [False, daniel2['player_name']]
 
-                    #this is so we clean up the main queue later for players that have already been matched
+                    self.in_queue[daniel2['player_name']] = [False, deque([daniel1['player_name']], maxlen=self.recent_opponents_limit)]
+                    self.in_queue[daniel1['player_name']][1].append(daniel2['player_name'])
+
+                    # Clean up the main queue for players that have already been matched
                     for idx in reversed(range(len(self.matchmaking_queue))):
                         player = self.matchmaking_queue[idx]
                         if player and (player['player_name'] == daniel2['player_name']):
-                             self.matchmaking_queue[idx] = None
+                            self.matchmaking_queue[idx] = None
 
                     self.in_match[daniel1['player_name']] = True
                     self.in_match[daniel2['player_name']] = True
                     matchmade = True
                     await self.create_match_interaction(ctx, daniel1, daniel2)
                     break
-            if old_daniel:
-                #readding old daniel back into the q
+
+            # Re-add all skipped old_daniels back into the queue
+            for old_daniel in old_daniels:
                 self.dans_in_queue[old_daniel['dan']].appendleft(old_daniel)
                 self.in_queue[old_daniel['player_name']][0] = True
+
             if not matchmade:
-                 self.matchmaking_queue.appendleft(daniel1)  # Append back to the deque
-                 self.dans_in_queue[daniel1['dan']].appendleft(daniel1)  # Append back to the deque
-                 self.in_queue[daniel1['player_name']][0] = True
-                 break
+                self.matchmaking_queue.appendleft(daniel1)  # Append back to the deque
+                self.dans_in_queue[daniel1['dan']].appendleft(daniel1)  # Append back to the deque
+                self.in_queue[daniel1['player_name']][0] = True
+                break
 
     async def create_match_interaction(self, ctx: discord.Interaction, daniel1, daniel2):
         self.cur_active_matches += 1
