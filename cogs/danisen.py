@@ -664,6 +664,8 @@ class Danisen(commands.Cog):
             "SELECT dan AS name, COUNT(*) AS value FROM players GROUP BY dan ORDER BY dan"
         ).fetchall()
 
+        # reformat dan count as their names are just numbers
+        dan_count = [{"name": f"Dan {dan['name']}", "value": dan['value']} for dan in dan_count]
         char_pages = self.create_paginated_embeds("Character Stats", char_count, MAX_FIELDS_PER_EMBED)
         dan_pages = self.create_paginated_embeds("Dan Stats", dan_count, MAX_FIELDS_PER_EMBED, colour=discord.Color.blurple())
 
