@@ -653,17 +653,14 @@ class Danisen(commands.Cog):
                                         "ORDER BY dan;"))
         dan_count = res.fetchall()
         page_list = []
-        em = discord.Embed(title=f"Character Stats 1/2")
-        page_list.append(em)
-        
-        #split characters across pages, theres a maximum of 25 fields per embed
+        #split characters evenly across pages, theres a maximum of 25 fields per embed
         total_pages = (len(char_count)//MAX_FIELDS_PER_EMBED) + 1
+        characters_per_page = len(char_count)//total_pages
         for page in range(total_pages):
             em = discord.Embed(title=f"Character Stats {page+1}/{total_pages}")
             page_list.append(em)
-            for char in char_count[page*MAX_FIELDS_PER_EMBED:(page+1)*MAX_FIELDS_PER_EMBED]:
-                em.add_field(name=f"{char['character']}", value=f"Count : {char['count']}")
-        em = discord.Embed(title=f"Character Stats {total_pages}/{total_pages}")
+            for idx in range(page * characters_per_page, min((page + 1) * characters_per_page, len(char_count))):
+                em.add_field(name=f"{char_count[idx]['character']}", value=f"Count : {char_count[idx]['count']}")
 
         em = discord.Embed(title=f"Dan Stats")
         page_list.append(em)
