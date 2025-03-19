@@ -349,25 +349,24 @@ class Danisen(commands.Cog):
     @discord.commands.slash_command(description="leave the danisen queue")
     async def leave_queue(self, ctx : discord.ApplicationContext):
         name = ctx.author.name
-        self.logger.info(f'leave queue called for {name}')
+        self.logger.info(f"{name} requested to leave the queue")
         daniel = None 
 
         for member in self.matchmaking_queue:
             if member and (member['player_name'] == name):
                 self.matchmaking_queue.remove(member)  # Remove from deque
                 daniel = member
-                self.logger.info(f"removed {name} from MMQ {list(self.matchmaking_queue)}")
                 break
 
         if daniel:
             if daniel in self.dans_in_queue[daniel['dan']]:
                 self.dans_in_queue[daniel['dan']].remove(daniel)  # Remove from deque
-                self.logger.info(f"removed {name} from DanQ {list(self.dans_in_queue[daniel['dan']])}")
 
             self.in_queue[daniel['player_name']][0] = False
             await ctx.respond("You have been removed from the queue")
         else:
             await ctx.respond("You are not in queue")
+
     #joins the matchmaking queue
     @discord.commands.slash_command(description="queue up for danisen games")
     async def join_queue(self, ctx : discord.ApplicationContext,
@@ -380,7 +379,6 @@ class Danisen(commands.Cog):
 
         #check if q open
         if self.queue_status == False:
-            self.logger.info("Queue is closed ending join function")
             await ctx.respond(f"The matchmaking queue is currently closed")
             return
 
@@ -388,7 +386,6 @@ class Danisen(commands.Cog):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char}'")
         daniel = res.fetchone()
         if daniel == None:
-            self.logger.info(f"{ctx.author.name} not registered with {char}")
             await ctx.respond(f"You are not registered with that character")
             return
 
@@ -396,45 +393,29 @@ class Danisen(commands.Cog):
         daniel['requeue'] = rejoin_queue
 
         #Check if in Queue already
-        self.logger.info(f"join_queue called for {ctx.author.name}")
-        if ctx.author.name not in self.in_queue.keys():
-            self.logger.info(f"added {ctx.author.name} to in_queue dict")
-            self.in_queue[ctx.author.name] = [True, None]
-            self.logger.info(f"in_queue {self.in_queue}")
-        elif self.in_queue[ctx.author.name][0]:
-            self.logger.info(f"{ctx.author.name} in the queue")
+        if ctx.author.name in self.in_queue and self.in_queue[ctx.author.name][0]:
             await ctx.respond(f"You are already in the queue")
             return
 
         #check if in a match already
-        if ctx.author.name not in self.in_match.keys():
-            self.logger.info(f"added {ctx.author.name} to in_match dict")
-            self.in_match[ctx.author.name] = False
-            self.logger.info(f"in_match {self.in_match}")
-        elif self.in_match[ctx.author.name]:
-            self.logger.info(f"{ctx.author.name} is in an active match and cannot queue up")
+        if ctx.author.name in self.in_match and self.in_match[ctx.author.name]:
             await ctx.respond(f"You are in an active match and cannot queue up")
             return
 
-        self.in_queue[ctx.author.name][0] = True
+        self.in_queue.setdefault(ctx.author.name, [True, None])
+        self.in_match.setdefault(ctx.author.name, False)
 
         self.dans_in_queue[daniel['dan']].append(daniel)
         self.matchmaking_queue.append(daniel)
         await ctx.respond(f"You've been added to the matchmaking queue with {char}")
 
-        self.logger.info("Current MMQ")
-        self.logger.info(self.matchmaking_queue)
-        self.logger.info("Current DanQ")
-        self.logger.info(self.dans_in_queue)
         #matchmake
         if (self.cur_active_matches < self.max_active_matches and
             len(self.matchmaking_queue) >= 2):
-            self.logger.info("matchmake function called")
             await self.matchmake(ctx.interaction)
 
     def rejoin_queue(self, player):
         if self.queue_status == False:
-            self.logger.info("q is closed so no rejoin")
             return
 
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND character='{player['character']}'")
@@ -445,16 +426,10 @@ class Danisen(commands.Cog):
         self.in_queue[player['player_name']][0] = True
         self.dans_in_queue[player['dan']].append(player)
         self.matchmaking_queue.append(player)
-        self.logger.info(f"{player['player_name']} has rejoined the queue")
 
     @discord.commands.slash_command(description="view players in the queue")
     async def view_queue(self, ctx : discord.ApplicationContext):
         self.matchmaking_queue = [player for player in self.matchmaking_queue if player]
-        self.logger.info("view_queue called")
-        self.logger.info("Current MMQ")
-        self.logger.info(self.matchmaking_queue)
-        self.logger.info("Current DanQ")
-        self.logger.info(self.dans_in_queue)
         await ctx.respond(f"Current full MMQ {self.matchmaking_queue}\nCurrent full DanQ {self.dans_in_queue}")
 
     async def matchmake(self, ctx : discord.Interaction):
@@ -465,14 +440,11 @@ class Danisen(commands.Cog):
                 continue
 
             self.in_queue[daniel1['player_name']][0] = False
-            self.logger.info(f"Updated in_queue to set {daniel1} to False")
-            self.logger.info(f"in_queue {self.in_queue}")
-
 
             same_daniel = self.dans_in_queue[daniel1['dan']].popleft()  # Pop from the left of the deque
             #sanity check that this is also the latest daniel in the respective dan queue
             if daniel1 != same_daniel:
-                self.logger.error(f"Somethings gone very wrong... daniel queues are not synchronized {daniel1=} {same_daniel=}")
+                self.logger.error(f"Queue desynchronization detected: {daniel1=} {same_daniel=}")
                 return
             
             #iterate through daniel queues to find suitable opponent
@@ -492,7 +464,6 @@ class Danisen(commands.Cog):
                 if DEFAULT_DAN <= cur_dan <= SPECIAL_RANK_THRESHOLD:
                     check_dan.append(cur_dan)
             
-            self.logger.info(f"dan queues to check {check_dan}")
             old_daniel = None
             matchmade = False
             for dan in check_dan:
@@ -500,25 +471,18 @@ class Danisen(commands.Cog):
                     daniel2 = self.dans_in_queue[dan].popleft()
                     if self.in_queue[daniel1['player_name']][1] == daniel2['player_name']:
                         #same match would occur, find different opponent
-                        self.logger.info(f"Same match would occur but prevented {daniel1} vs {daniel2}")
                         old_daniel = daniel2
                         continue
                     
                     self.in_queue[daniel2['player_name']] = [False, daniel1['player_name']]
                     self.in_queue[daniel1['player_name']] = [False, daniel2['player_name']]
-                    self.logger.info(f"Updated in_queue to set last played match")
-                    self.logger.info(f"in_queue {self.in_queue}")
 
                     #this is so we clean up the main queue later for players that have already been matched
                     for idx in reversed(range(len(self.matchmaking_queue))):
                         player = self.matchmaking_queue[idx]
                         if player and (player['player_name'] == daniel2['player_name']):
                              self.matchmaking_queue[idx] = None
-                             self.logger.info(f"Set {player['player_name']} to none in matchmaking queue")
-                             self.logger.info(self.matchmaking_queue)
 
-
-                    self.logger.info(f"match made between {daniel1} and {daniel2}")
                     self.in_match[daniel1['player_name']] = True
                     self.in_match[daniel2['player_name']] = True
                     matchmade = True
@@ -528,12 +492,10 @@ class Danisen(commands.Cog):
                 #readding old daniel back into the q
                 self.dans_in_queue[old_daniel['dan']].appendleft(old_daniel)
                 self.in_queue[old_daniel['player_name']][0] = True
-                self.logger.info(f"we readded daniel2 {old_daniel}")
             if not matchmade:
                  self.matchmaking_queue.appendleft(daniel1)  # Append back to the deque
                  self.dans_in_queue[daniel1['dan']].appendleft(daniel1)  # Append back to the deque
                  self.in_queue[daniel1['player_name']][0] = True
-                 self.logger.info(f"we readded daniel1 {daniel1} and are breaking from matchmake")
                  break
 
     async def create_match_interaction(self, ctx: discord.Interaction, daniel1, daniel2):
