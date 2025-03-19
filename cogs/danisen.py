@@ -227,47 +227,43 @@ class Danisen(commands.Cog):
         await ctx.send_response(embed=em)
     #registers player+char to db
     @discord.commands.slash_command(description="Register to the Danisen database!")
-    async def register(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, autocomplete=character_autocomplete)):
+    async def register(self, ctx: discord.ApplicationContext,
+                       char1: discord.Option(str, autocomplete=character_autocomplete)):
         player_name = ctx.author.name
 
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
             return
 
-        line = [ctx.author.id, player_name, char1, 1, 0]
-        insert_new_player(tuple(line),self.database_cur)
+        line = (ctx.author.id, player_name, char1, 1, 0)
+        self.database_cur.execute(
+            "INSERT INTO players (discord_id, player_name, character, dan, points) VALUES (?, ?, ?, ?, ?)", 
+            line
+        )
+        self.database_con.commit()
+
         role_list = []
         char_role = discord.utils.get(ctx.guild.roles, name=char1)
         if char_role:
             role_list.append(char_role)
         self.logger.info(f"Adding to db {player_name} {char1}")
-        self.database_con.commit()
 
-        self.logger.info(f"Adding Character and Dan roles to user")
         dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
         if dan_role:
             role_list.append(dan_role)
 
         bot_member = ctx.guild.get_member(self.bot.user.id)
-        can_add_roles = True
-        message_text = ""
-        if role_list:
-            for role in role_list:
-                can_add_roles = can_add_roles and self.can_manage_role(bot_member,role)
-            if can_add_roles:
-                await ctx.author.add_roles(*role_list)
-            else:
-                message_text += "Could not add Dan 1 role or Character roles due to bot's role being too low\n\n"
-                self.logger.warning(f"Could not add Dan 1 role or Character roles due to bot's role being too low")
-        
-        message_text += (f"You are now registered as {player_name} with the following character/s {char1}\n"
-                         "if you wish to add more characters you can register multiple times!\n\n"
-                         "Welcome to the Danielsen!")
+        can_add_roles = all(self.can_manage_role(bot_member, role) for role in role_list)
+        if can_add_roles:
+            await ctx.author.add_roles(*role_list)
+        else:
+            self.logger.warning("Could not add roles due to bot's role being too low")
 
-        
-
-        await ctx.respond(message_text)
+        await ctx.respond(
+            f"You are now registered as {player_name} with the following character/s {char1}\n"
+            "If you wish to add more characters, you can register multiple times!\n\n"
+            "Welcome to the Danisen!"
+        )
 
     @discord.commands.slash_command(description="unregister to the Danisen database!")
     async def unregister(self, ctx : discord.ApplicationContext, 
@@ -560,32 +556,31 @@ class Danisen(commands.Cog):
     #report match score
     @discord.commands.slash_command(description="Report a match score")
     @discord.commands.default_permissions(send_polls=True)
-    async def report_match(self, ctx : discord.ApplicationContext,
-                        player1_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char1 : discord.Option(str, autocomplete=character_autocomplete),
-                        player2_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char2 : discord.Option(str, autocomplete=character_autocomplete),
-                        winner : discord.Option(str, choices=players)):
+    async def report_match(self, ctx: discord.ApplicationContext,
+                           player1_name: discord.Option(str, autocomplete=player_autocomplete),
+                           char1: discord.Option(str, autocomplete=character_autocomplete),
+                           player2_name: discord.Option(str, autocomplete=player_autocomplete),
+                           char2: discord.Option(str, autocomplete=character_autocomplete),
+                           winner: discord.Option(str, choices=players)):
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char1 selected {char1}. Please choose a valid char1.")
             return
         if not self.is_valid_char(char2):
             await ctx.respond(f"Invalid char2 selected {char2}. Please choose a valid char2.")
             return
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE player_name='{player1_name}' AND character='{char1}'")
-        player1 = res.fetchone()
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE player_name='{player2_name}' AND character='{char2}'")
-        player2 = res.fetchone()
+
+        player1 = self.get_player(player1_name, char1)
+        player2 = self.get_player(player2_name, char2)
 
         if not player1:
-            await ctx.respond(f"""No player named {player1_name} with character {char1}""")
+            await ctx.respond(f"No player named {player1_name} with character {char1}")
             return
         if not player2:
-            await ctx.respond(f"""No player named {player2_name} with character {char2}""")
+            await ctx.respond(f"No player named {player2_name} with character {char2}")
             return
 
-        self.logger.info(f"reported match {player1_name} vs {player2_name} as {winner} win")
-        if (winner == "player1") :
+        self.logger.info(f"Reported match {player1_name} vs {player2_name} as {winner} win")
+        if winner == "player1":
             winner_rank, loser_rank = await self.score_update(ctx, player1, player2)
             winner = player1_name
             loser = player2_name
@@ -594,7 +589,11 @@ class Danisen(commands.Cog):
             winner = player2_name
             loser = player1_name
 
-        await ctx.respond(f"Match has been reported as {winner}'s victory over {loser}\n{player1_name}'s {char1} rank is now {winner_rank[0]} dan {winner_rank[1]} points\n{player2_name}'s {char2} rank is now {loser_rank[0]} dan {loser_rank[1]} points")
+        await ctx.respond(
+            f"Match has been reported as {winner}'s victory over {loser}\n"
+            f"{player1_name}'s {char1} rank is now {winner_rank[0]} dan {winner_rank[1]} points\n"
+            f"{player2_name}'s {char2} rank is now {loser_rank[0]} dan {loser_rank[1]} points"
+        )
 
     #report match score for the queue
     async def report_match_queue(self, interaction: discord.Interaction, player1, player2, winner):
@@ -614,19 +613,21 @@ class Danisen(commands.Cog):
             self.logger.warning("No Report Matches Channel")
 
     @discord.commands.slash_command(description="See players in a specific dan")
-    async def dan(self, ctx : discord.ApplicationContext,
-                  dan : discord.Option(int, min_value=1, max_value=12)):
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE dan={dan}")
-        daniels = res.fetchall()
+    async def dan(self, ctx: discord.ApplicationContext,
+                  dan: discord.Option(int, min_value=1, max_value=12)):
+        daniels = self.get_players_by_dan(dan)
         page_list = []
-        em = discord.Embed(title=f"Dan {dan}",colour=self.dan_colours[dan-1])
+        em = discord.Embed(title=f"Dan {dan}", colour=self.dan_colours[dan - 1])
         page_list.append(em)
         page_size = 0
         for daniel in daniels:
             page_size += 1
-            page_list[-1].add_field(name=f"{daniel['player_name']} {daniel['character']}", value=f"Dan : {daniel['dan']} Points: {daniel['points']}")
+            page_list[-1].add_field(
+                name=f"{daniel['player_name']} {daniel['character']}",
+                value=f"Dan : {daniel['dan']} Points: {daniel['points']}"
+            )
             if page_size == 10:
-                em = discord.Embed(title=f"Dan {dan}",colour=self.dan_colours[dan-1])
+                em = discord.Embed(title=f"Dan {dan}", colour=self.dan_colours[dan - 1])
                 page_list.append(em)
                 page_size = 0
         paginator = pages.Paginator(pages=page_list)
@@ -687,3 +688,17 @@ class Danisen(commands.Cog):
                                  max : discord.Option(int, min_value=1)):
         self.max_active_matches = max
         await ctx.respond(f"Max matches updated to {max}")
+
+    def get_player(self, player_name, character):
+        res = self.database_cur.execute(
+            "SELECT * FROM players WHERE player_name=? AND character=?", 
+            (player_name, character)
+        )
+        return res.fetchone()
+
+    def get_players_by_dan(self, dan):
+        res = self.database_cur.execute(
+            "SELECT * FROM players WHERE dan=?", 
+            (dan,)
+        )
+        return res.fetchall()
