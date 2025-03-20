@@ -431,7 +431,6 @@ class Danisen(commands.Cog):
 
     @discord.commands.slash_command(description="view players in the queue")
     async def view_queue(self, ctx : discord.ApplicationContext):
-        self.matchmaking_queue = [player for player in self.matchmaking_queue if player]
         await ctx.respond(f"Current full MMQ {self.matchmaking_queue}\nCurrent full DanQ {self.dans_in_queue}")
 
     async def matchmake(self, ctx : discord.Interaction):
