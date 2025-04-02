@@ -243,6 +243,17 @@ class Danisen(commands.Cog):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
             return
 
+        # Check if the player is already registered with the character
+        res = self.database_cur.execute(
+            "SELECT * FROM players WHERE discord_id = ? AND character = ?",
+            (ctx.author.id, char1)
+        ).fetchone()
+
+        if res:
+            await ctx.respond(f"You are already registered with the character {char1}.")
+            return
+
+        # Insert the new player record
         line = (ctx.author.id, player_name, char1, DEFAULT_DAN, DEFAULT_POINTS)
         self.database_cur.execute(
             "INSERT INTO players (discord_id, player_name, character, dan, points) VALUES (?, ?, ?, ?, ?)", 
@@ -641,6 +652,9 @@ class Danisen(commands.Cog):
                                  max : discord.Option(int, min_value=1)):
         self.max_active_matches = max
         await ctx.respond(f"Max matches updated to {max}")
+        if (self.cur_active_matches < self.max_active_matches and
+        len(self.matchmaking_queue) >= 2):
+            await self.matchmake(ctx.interaction)
 
     def get_player(self, player_name, character):
         res = self.database_cur.execute(
