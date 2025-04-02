@@ -4,6 +4,7 @@ from cogs.database import *
 from cogs.custom_views import *
 import os
 from collections import deque
+
 # Constants
 MAX_FIELDS_PER_EMBED = 25
 MAX_DAN_RANK = 12
@@ -15,137 +16,119 @@ DEFAULT_DAN = 1
 DEFAULT_POINTS = 0
 
 class Danisen(commands.Cog):
-    characters = ["Hyde","Linne","Waldstein","Carmine","Orie","Gordeau","Merkava","Vatista","Seth","Yuzuriha","Hilda","Chaos","Nanase","Byakuya","Phonon","Mika","Wagner","Enkidu","Londrekia","Tsurugi","Kaguya","Kuon","Uzuki","Eltnum","Akatsuki","Ogre"]
+    # Predefined characters and players
+    characters = ["Hyde", "Linne", "Waldstein", "Carmine", "Orie", "Gordeau", "Merkava", "Vatista", "Seth", "Yuzuriha", "Hilda", "Chaos", "Nanase", "Byakuya", "Phonon", "Mika", "Wagner", "Enkidu", "Londrekia", "Tsurugi", "Kaguya", "Kuon", "Uzuki", "Eltnum", "Akatsuki", "Ogre"]
     players = ["player1", "player2"]
-    dan_colours = [discord.Colour.from_rgb(255,255,255), discord.Colour.from_rgb(255,255,0), discord.Colour.from_rgb(255,153,0),
-                   discord.Colour.from_rgb(39, 78, 19), discord.Colour.from_rgb(97,0,162), discord.Colour.from_rgb(0,0,177), discord.Colour.from_rgb(120,63,4),
-                   #SPECIAL RANKS
-                   discord.Colour.from_rgb(0,0,255), discord.Colour.from_rgb(120,63,4), discord.Colour.from_rgb(255,0,0), discord.Colour.from_rgb(152,0,0), discord.Colour.from_rgb(0,0,0)
-                   ]
+    dan_colours = [
+        discord.Colour.from_rgb(255, 255, 255), discord.Colour.from_rgb(255, 255, 0), discord.Colour.from_rgb(255, 153, 0),
+        discord.Colour.from_rgb(39, 78, 19), discord.Colour.from_rgb(97, 0, 162), discord.Colour.from_rgb(0, 0, 177), discord.Colour.from_rgb(120, 63, 4),
+        # SPECIAL RANKS
+        discord.Colour.from_rgb(0, 0, 255), discord.Colour.from_rgb(120, 63, 4), discord.Colour.from_rgb(255, 0, 0), discord.Colour.from_rgb(152, 0, 0), discord.Colour.from_rgb(0, 0, 0)
+    ]
 
     def __init__(self, bot, database, config_path):
-        # Set up the logger
+        # Initialize the cog
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
         self.bot = bot
-        self._last_member = None
-
         self.config_path = config_path
         self.update_config()
 
+        # Database setup
         self.database_con = database
         self.database_con.row_factory = sqlite3.Row
         self.database_cur = self.database_con.cursor()
-        self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points,   PRIMARY KEY (discord_id, character) )")
+        self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points, PRIMARY KEY (discord_id, character))")
 
+        # Queue and matchmaking setup
         self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Use deque for dans_in_queue
         self.matchmaking_queue = deque()  # Use deque for matchmaking_queue
-
         self.max_active_matches = 3
         self.cur_active_matches = 0
-
         self.recent_opponents_limit = 3  # Default value, configurable via config
-        # dict with format player_name: [in_queue, deque of last played player names]
-        self.in_queue = {}
-        #dict with following format player_name:in_match
-        self.in_match = {}
+        self.in_queue = {}  # Format: player_name: [in_queue, deque of last played player names]
+        self.in_match = {}  # Format: player_name: in_match
 
     def can_manage_role(self, bot_member, role):
-        # Check if bot's highest role is higher than the role to be added
-        return (
-            bot_member.top_role.position > role.position and 
-            bot_member.guild_permissions.manage_roles
-        )
-    def update_config(self):
+        # Check if the bot can manage a specific role
+        return bot_member.top_role.position > role.position and bot_member.guild_permissions.manage_roles
 
+    def update_config(self):
+        # Load configuration from the config file
+        config = {}  # Initialize config as an empty dictionary
         try:
             if os.path.exists(self.config_path):
                 with open(self.config_path, 'r') as f:
                     config = json.load(f)
         except Exception as e:
-            self.logger.warning("Warning", f"Failed to load configuration: {str(e)}")
+            self.logger.warning(f"Failed to load configuration: {str(e)}")  # Fix logging issue
 
-        ###################################################
-        #SET ALL CONFIG VALUES 
-
-        
+        # Set all configuration values
         self.ACTIVE_MATCHES_CHANNEL_ID = int(config.get('ACTIVE_MATCHES_CHANNEL_ID', 0))
         self.REPORTED_MATCHES_CHANNEL_ID = int(config.get('REPORTED_MATCHES_CHANNEL_ID', 0))
-
         self.total_dans = config.get('total_dans', MAX_DAN_RANK)
         self.minimum_derank = config.get('minimum_derank', DEFAULT_DAN)
         self.maximum_rank_difference = config.get('maximum_rank_difference', 2)
         self.rank_gap_for_more_points = config.get('rank_gap_for_more_points', 1)
-
-        #if point_rollover is enabled then if we have a dan1 with 2 points, that gains 2 points, they will be (dan 2, 1 point) after
-        #without rollover they are only (dan 2, 0 points)
         self.point_rollover = config.get('point_rollover', True)
-        self.queue_status = config.get('queue_status',True)
+        self.queue_status = config.get('queue_status', True)
         self.recent_opponents_limit = config.get('recent_opponents_limit', 2)
-
-        ###################################################
 
     @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
-    async def set_queue(self, ctx : discord.ApplicationContext,
-                        queue_status : discord.Option(bool)):
+    async def set_queue(self, ctx: discord.ApplicationContext, queue_status: discord.Option(bool)):
+        # Enable or disable the matchmaking queue
         self.queue_status = queue_status
-        if queue_status == False:
+        if not queue_status:
             self.matchmaking_queue.clear()  # Clear the deque
             self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Reset to empty deques
             self.in_queue = {}
             self.in_match = {}
-            await ctx.respond(f"The matchmaking queue has been disabled")
+            await ctx.respond("The matchmaking queue has been disabled")
         else:
-            await ctx.respond(f"The matchmaking queue has been enabled")
-
+            await ctx.respond("The matchmaking queue has been enabled")
 
     def dead_role(self, ctx, player):
+        # Check if a player's dan role should be removed
         role = None
-
         self.logger.info(f'Checking if dan should be removed as well')
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan={player['dan']}")
         remaining_daniel = res.fetchone()
         if not remaining_daniel:
             self.logger.info(f"Dan role {player['dan']} will be removed")
             role = discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}")
-            return role
+        return role
 
     async def score_update(self, ctx, winner, loser):
+        # Update scores for a match
         winner_rank = [winner['dan'], winner['points']]
         loser_rank = [loser['dan'], loser['points']]
-
         rankdown = False
         rankup = False
-        
+
+        # Determine rankup points based on rank type
         rankup_points = RANKUP_POINTS_NORMAL if winner_rank[0] <= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_SPECIAL
 
-        #winning if you are more than the maximum_rank_difference you gain nothing
+        # Winning logic
         if winner_rank[0] > loser_rank[0] + self.maximum_rank_difference:
             return winner_rank, loser_rank
 
         if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points:
-            #lower ranked player gains 2 point at most if rank gap is big enough
-            winner_rank[1] += 2
+            winner_rank[1] += 2  # Lower-ranked player gains 2 points
         else:
-            #higher ranked player gains 1 points
-            winner_rank[1] += 1
+            winner_rank[1] += 1  # Higher-ranked player gains 1 point
 
-        #minimum rank has different rules to clamp the points lost e.g. (min for dan1 is (dan 1, 0 point), min for other dans is -2 pts)
+        # Losing logic
         if loser_rank[0] > self.minimum_derank:
             loser_rank[1] -= 1
-        #point loss for minimum dans is capped at 0 min (minimum is 0 points)
         elif loser_rank[1] > 0:
             loser_rank[1] -= 1
 
-        #rankup logic (normal ranks promote at +3) (special at +5)
+        # Rankup logic
         if winner_rank[1] >= rankup_points:
             winner_rank[0] += 1
-            if self.point_rollover:
-                winner_rank[1] = winner_rank[1] % rankup_points
-            else:
-                winner_rank[1] = 0
+            winner_rank[1] = winner_rank[1] % rankup_points if self.point_rollover else 0
             rankup = True
 
         # Rankdown logic
@@ -154,32 +137,26 @@ class Danisen(commands.Cog):
             loser_rank[1] = DEFAULT_POINTS
             rankdown = True
 
+        # Log new scores
         self.logger.info("New Scores")
         self.logger.info(f"Winner : {winner['player_name']} dan {winner_rank[0]}, points {winner_rank[1]}")
         self.logger.info(f"Loser : {loser['player_name']} dan {loser_rank[0]}, points {loser_rank[1]}")
 
+        # Update database
         self.database_cur.execute(f"UPDATE players SET dan = {winner_rank[0]}, points = {winner_rank[1]} WHERE player_name='{winner['player_name']}' AND character='{winner['character']}'")
         self.database_cur.execute(f"UPDATE players SET dan = {loser_rank[0]}, points = {loser_rank[1]} WHERE player_name='{loser['player_name']}' AND character='{loser['character']}'")
         self.database_con.commit()
 
-        #Update roles on rankup/down
+        # Update roles on rankup/down
         if rankup:
             role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0]}")
             member = ctx.guild.get_member(winner['discord_id'])
             bot_member = ctx.guild.get_member(self.bot.user.id)
-            if role:
-                if self.can_manage_role(bot_member,role):
-                    await member.add_roles(role)
-                else:
-                    self.logger.warning(f"Could not add {role} to {member.name} due to bot's role being too low")
-
-            self.logger.info(f"Dan {winner_rank[0]} added to {member.name}")
+            if role and self.can_manage_role(bot_member, role):
+                await member.add_roles(role)
             role = self.dead_role(ctx, winner)
-            if role:
-                if self.can_manage_role(bot_member,role):
-                    await member.remove_roles(role)
-                else:
-                    self.logger.warning(f"Could not remove {role} to {member.name} due to bot's role being too low")
+            if role and self.can_manage_role(bot_member, role):
+                await member.remove_roles(role)
 
         if rankdown:
             member = ctx.guild.get_member(loser['discord_id'])
@@ -188,6 +165,7 @@ class Danisen(commands.Cog):
                 await member.remove_roles(role)
 
         return winner_rank, loser_rank
+
     # Custom decorator for validation
     def is_valid_char(self, char):
         return char in self.characters
@@ -441,12 +419,19 @@ class Danisen(commands.Cog):
             return
 
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND character='{player['character']}'")
-        player = res.fetchone()
-        player = DanisenRow(player)
+        db_player = res.fetchone()
+        if not db_player:
+            return  # Exit if the player is not found in the database
+
+        player = DanisenRow(db_player)  # Transform the database row into a DanisenRow
         player['requeue'] = True
 
+        # Ensure the player is initialized in self.in_queue
+        if player['player_name'] not in self.in_queue:
+            self.in_queue[player['player_name']] = [False, deque(maxlen=self.recent_opponents_limit)]
+
         self.in_queue[player['player_name']][0] = True
-        self.dans_in_queue[player['dan']].append(player)
+        self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
         self.matchmaking_queue.append(player)
 
     @discord.commands.slash_command(description="view players in the queue")
