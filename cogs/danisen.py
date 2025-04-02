@@ -3,8 +3,7 @@ from discord.ext import commands, pages
 from cogs.database import *
 from cogs.custom_views import *
 import os
-from collections import deque  # Ensure deque is imported
-
+from collections import deque
 # Constants
 MAX_FIELDS_PER_EMBED = 25
 MAX_DAN_RANK = 12
@@ -290,6 +289,16 @@ class Danisen(commands.Cog):
 
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
+            return
+
+        # Check if the player is in a match
+        if ctx.author.name in self.in_match and self.in_match[ctx.author.name]:
+            await ctx.respond("You cannot unregister while in an active match.")
+            return
+
+        # Check if the player is in the queue
+        if ctx.author.name in self.in_queue and self.in_queue[ctx.author.name][0]:
+            await ctx.respond("You cannot unregister while in the queue. Please leave the queue first.")
             return
 
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
