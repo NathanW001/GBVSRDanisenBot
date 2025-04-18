@@ -438,22 +438,31 @@ class Danisen(commands.Cog):
     async def view_queue(self, ctx : discord.ApplicationContext):
         await ctx.respond(f"Current full MMQ {self.matchmaking_queue}\nCurrent full DanQ {self.dans_in_queue}")
 
-    async def matchmake(self, ctx : discord.Interaction):
+    async def matchmake(self, ctx: discord.Interaction):
         while (self.cur_active_matches < self.max_active_matches and
-                len(self.matchmaking_queue) >= 2):
+               len(self.matchmaking_queue) >= 2):
+            self.logger.debug(f"Starting matchmaking loop. Current matchmaking_queue: {list(self.matchmaking_queue)}")
+            self.logger.debug(f"Current dans_in_queue: { {dan: list(queue) for dan, queue in self.dans_in_queue.items()} }")
+
             daniel1 = self.matchmaking_queue.popleft()  # Pop from the left of the deque
+            self.logger.debug(f"Dequeued daniel1 from matchmaking_queue: {daniel1}")
+
             if not daniel1:
+                self.logger.warning("Dequeued daniel1 is None. Skipping iteration.")
                 continue
 
             self.in_queue[daniel1['player_name']][0] = False
 
             same_daniel = self.dans_in_queue[daniel1['dan']].popleft()  # Pop from the left of the deque
+            self.logger.debug(f"Dequeued same_daniel from dans_in_queue[{daniel1['dan']}]: {same_daniel}")
+
             # Sanity check that this is also the latest daniel in the respective dan queue
             if daniel1 != same_daniel:
-                self.logger.error(f"Queue desynchronization detected: {daniel1=} {same_daniel=}")
+                self.logger.error(f"Queue desynchronization detected: daniel1={daniel1} same_daniel={same_daniel}")
+                self.logger.debug(f"Remaining matchmaking_queue: {list(self.matchmaking_queue)}")
+                self.logger.debug(f"Remaining dans_in_queue[{daniel1['dan']}]: {list(self.dans_in_queue[daniel1['dan']])}")
                 return
-            
-            # Iterate through daniel queues to find a suitable opponent
+
             check_dan = [daniel1['dan']]
             for dan_offset in range(1, max(self.total_dans - check_dan[0], check_dan[0] - DEFAULT_DAN)):
                 cur_dan = check_dan[0] + dan_offset
@@ -462,14 +471,17 @@ class Danisen(commands.Cog):
                 cur_dan = check_dan[0] - dan_offset
                 if DEFAULT_DAN <= cur_dan <= SPECIAL_RANK_THRESHOLD:
                     check_dan.append(cur_dan)
-            
+
             old_daniels = []  # List to track multiple old_daniel instances
             matchmade = False
             for dan in check_dan:
+                self.logger.debug(f"Checking dan queue for dan {dan}: {list(self.dans_in_queue[dan])}")
                 if self.dans_in_queue[dan]:
                     daniel2 = self.dans_in_queue[dan].popleft()
+                    self.logger.debug(f"Dequeued daniel2 from dans_in_queue[{dan}]: {daniel2}")
+
                     if daniel2['player_name'] in self.in_queue[daniel1['player_name']][1]:
-                        # Skip if daniel2 is in daniel1's recent opponents
+                        self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents.")
                         old_daniels.append(daniel2)
                         continue
 
@@ -480,6 +492,7 @@ class Danisen(commands.Cog):
                     for idx in reversed(range(len(self.matchmaking_queue))):
                         player = self.matchmaking_queue[idx]
                         if player and (player['player_name'] == daniel2['player_name']):
+                            self.logger.debug(f"Removing matched player {player} from matchmaking_queue.")
                             self.matchmaking_queue[idx] = None
 
                     self.in_match[daniel1['player_name']] = True
@@ -490,10 +503,12 @@ class Danisen(commands.Cog):
 
             # Re-add all skipped old_daniels back into the queue
             for old_daniel in old_daniels:
+                self.logger.debug(f"Re-adding skipped daniel {old_daniel} back to dans_in_queue[{old_daniel['dan']}].")
                 self.dans_in_queue[old_daniel['dan']].appendleft(old_daniel)
                 self.in_queue[old_daniel['player_name']][0] = True
 
             if not matchmade:
+                self.logger.debug(f"No match found for daniel1 {daniel1}. Re-adding to queues.")
                 self.matchmaking_queue.appendleft(daniel1)  # Append back to the deque
                 self.dans_in_queue[daniel1['dan']].appendleft(daniel1)  # Append back to the deque
                 self.in_queue[daniel1['player_name']][0] = True
@@ -663,3 +678,45 @@ class Danisen(commands.Cog):
             (dan,)
         )
         return res.fetchall()
+
+    @discord.commands.slash_command(description="View your profile or another player's profile")
+    async def profile(self, ctx: discord.ApplicationContext, 
+                      discord_name: discord.Option(str, autocomplete=player_autocomplete, default=None)):
+        """Lists all registered characters for a player along with their ranks and points."""
+        # Determine the target player
+        if discord_name:
+            members = ctx.guild.members
+            member = next((m for m in members if discord_name.lower() == m.name.lower()), None)
+            if not member:
+                await ctx.respond(f"{discord_name} isn't a member of this server.")
+                return
+        else:
+            member = ctx.author
+
+        # Fetch all characters for the player
+        res = self.database_cur.execute(
+            "SELECT character, dan, points FROM players WHERE discord_id = ?", 
+            (member.id,)
+        ).fetchall()
+
+        if not res:
+            await ctx.respond(f"{member.name} has no registered characters.")
+            return
+
+        # Create an embed to display the profile
+        em = discord.Embed(
+            title=f"{member.name}'s Profile",
+            description="List of registered characters and their ranks",
+            color=discord.Color.blurple()
+        )
+        if member.avatar:
+            em.set_thumbnail(url=member.avatar.url)
+
+        for row in res:
+            em.add_field(
+                name=row["character"], 
+                value=f"Dan: {row['dan']}, Points: {row['points']}", 
+                inline=False
+            )
+
+        await ctx.respond(embed=em)
