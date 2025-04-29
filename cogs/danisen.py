@@ -46,7 +46,7 @@ class Danisen(commands.Cog):
         self.matchmaking_queue = deque()  # Use deque for matchmaking_queue
         self.max_active_matches = 3
         self.cur_active_matches = 0
-        self.recent_opponents_limit = 3  # Default value, configurable via config
+        self.recent_opponents_limit = 2  # Default value, configurable via config
         self.in_queue = {}  # Format: player_name: [in_queue, deque of last played player names]
         self.in_match = {}  # Format: player_name: in_match
 
@@ -74,6 +74,7 @@ class Danisen(commands.Cog):
         self.point_rollover = config.get('point_rollover', True)
         self.queue_status = config.get('queue_status', True)
         self.recent_opponents_limit = config.get('recent_opponents_limit', 2)
+        self.max_active_matches = config.get('max_active_matches', 3)  # New parameter
 
     @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
@@ -520,6 +521,7 @@ class Danisen(commands.Cog):
         view = MatchView(self, daniel1, daniel2)
         id1 = f"<@{daniel1['discord_id']}>"
         id2 = f"<@{daniel2['discord_id']}>"
+
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(

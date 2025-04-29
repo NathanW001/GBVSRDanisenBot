@@ -50,7 +50,8 @@ default_config_dict = {
     "rank_gap_for_more_points": 1,
     "recent_opponents_limit": 2,
     "point_rollover": True,
-    "queue_status": True
+    "queue_status": True,
+    "max_active_matches": 3  # New parameter
 }
 
 # Utility functions for configuration management
@@ -154,6 +155,11 @@ class ConfigTab(QWidget):
         self.recent_opponents_limit.setValue(2)  # Default value
         self.recent_opponents_limit.setToolTip("Limit of recent opponents to track for matchmaking")
 
+        self.max_active_matches = QSpinBox()
+        self.max_active_matches.setRange(1, 10)
+        self.max_active_matches.setValue(3)  # Default value
+        self.max_active_matches.setToolTip("Maximum number of active matches allowed at a time")
+
         self.point_rollover = QCheckBox()
         self.point_rollover.setToolTip("whether point gains roll over on rank up")
 
@@ -169,6 +175,7 @@ class ConfigTab(QWidget):
         self.config_form_layout.addRow("Maximum Rank Difference:", self.maximum_rank_difference)
         self.config_form_layout.addRow("Rank Gap for More Points:", self.rank_gap_for_more_points)
         self.config_form_layout.addRow("Recent Opponents Limit:", self.recent_opponents_limit)
+        self.config_form_layout.addRow("Max Active Matches:", self.max_active_matches)
 
         #add checkboxes
         self.config_form_layout.addRow("Point Rollover:",  self.point_rollover)
@@ -203,10 +210,11 @@ class ConfigTab(QWidget):
             "minimum_derank" : self.minimum_derank.value(),
             "maximum_rank_difference" : self.maximum_rank_difference.value(),
             "rank_gap_for_more_points" : self.rank_gap_for_more_points.value(),
-            "recent_opponents_limit": self.recent_opponents_limit.value(),  # New parameter
+            "recent_opponents_limit": self.recent_opponents_limit.value(),  # New 
+            "max_active_matches": self.max_active_matches.value(),  # New parameter
             #Bools
             "point_rollover" : self.point_rollover.isChecked(),
-            "queue_status" :  self.queue_status.isChecked()
+            "queue_status" :  self.queue_status.isChecked(),
         }
 
     def set_config_dict(self, config):
@@ -220,6 +228,7 @@ class ConfigTab(QWidget):
         self.minimum_derank.setValue(config.get("minimum_derank", 2))
         self.maximum_rank_difference.setValue(config.get("maximum_rank_difference", 1))
         self.rank_gap_for_more_points.setValue(config.get("rank_gap_for_more_points", 1))
+        self.max_active_matches.setValue(config.get("max_active_matches", 3))  # New parameter
         #Bools
         self.point_rollover.setChecked(config.get("point_rollover", True))
         self.queue_status.setChecked(config.get("queue_status", True))
