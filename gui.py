@@ -42,8 +42,8 @@ sys.stderr = LoggedStderr()
 
 default_config_dict = {
     "bot_token": "",
-    "ACTIVE_MATCHES_CHANNEL_ID": "",
-    "REPORTED_MATCHES_CHANNEL_ID": "",
+    "ACTIVE_MATCHES_CHANNEL_ID": "0",
+    "REPORTED_MATCHES_CHANNEL_ID": "0",
     "total_dans": 7,
     "minimum_derank": 2,
     "maximum_rank_difference": 1,

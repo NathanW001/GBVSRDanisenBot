@@ -372,10 +372,11 @@ class Danisen(commands.Cog):
     async def join_queue(self, ctx : discord.ApplicationContext,
                     char : discord.Option(str, autocomplete=character_autocomplete),
                     rejoin_queue : discord.Option(bool)):
+        await ctx.defer()
+
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
             return
-        await ctx.defer()
 
         #check if q open
         if self.queue_status == False:
@@ -466,10 +467,10 @@ class Danisen(commands.Cog):
             check_dan = [daniel1['dan']]
             for dan_offset in range(1, max(self.total_dans - check_dan[0], check_dan[0] - DEFAULT_DAN)):
                 cur_dan = check_dan[0] + dan_offset
-                if DEFAULT_DAN <= cur_dan <= SPECIAL_RANK_THRESHOLD:
+                if DEFAULT_DAN <= cur_dan <= self.total_dans:
                     check_dan.append(cur_dan)
                 cur_dan = check_dan[0] - dan_offset
-                if DEFAULT_DAN <= cur_dan <= SPECIAL_RANK_THRESHOLD:
+                if DEFAULT_DAN <= cur_dan <= self.total_dans:
                     check_dan.append(cur_dan)
 
             old_daniels = []  # List to track multiple old_daniel instances
