@@ -465,7 +465,7 @@ class Danisen(commands.Cog):
                 return
 
             check_dan = [daniel1['dan']]
-            for dan_offset in range(1, max(self.total_dans - check_dan[0], check_dan[0] - DEFAULT_DAN)):
+            for dan_offset in range(1, self.total_dans):
                 cur_dan = check_dan[0] + dan_offset
                 if DEFAULT_DAN <= cur_dan <= self.total_dans:
                     check_dan.append(cur_dan)
