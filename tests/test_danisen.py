@@ -276,6 +276,49 @@ class TestDanisen(unittest.IsolatedAsyncioTestCase):
 
         mock_channel.send.assert_called_once()
 
+    async def test_matchmake_dan1_and_dan12(self):
+        """Test matchmaking between a dan1 and a dan12 player."""
+        self.ctx.interaction = AsyncMock()
+
+        # Player1 (dan1)
+        player1 = {
+            "player_name": "Player1",
+            "discord_id": 12345,
+            "character": "Hyde",
+            "dan": 1,
+            "points": 0
+        }
+        # Player2 (dan12)
+        player2 = {
+            "player_name": "Player2",
+            "discord_id": 67890,
+            "character": "Linne",
+            "dan": 12,
+            "points": 0
+        }
+
+        # Add players to the matchmaking queue and dans_in_queue
+        self.danisen.matchmaking_queue.extend([player1, player2])
+        self.danisen.dans_in_queue[1].append(player1)
+        self.danisen.dans_in_queue[12].append(player2)
+        self.danisen.in_queue = {
+            "Player1": [True, deque()],
+            "Player2": [True, deque()]
+        }
+
+        # Mock create_match_interaction
+        self.danisen.create_match_interaction = AsyncMock()
+
+        # Run matchmaking
+        await self.danisen.matchmake(self.ctx.interaction)
+
+        # Assertions
+        self.danisen.create_match_interaction.assert_called_once_with(self.ctx.interaction, player1, player2)
+        self.assertFalse(self.danisen.in_queue["Player1"][0])  # Player1 is no longer in queue
+        self.assertFalse(self.danisen.in_queue["Player2"][0])  # Player2 is no longer in queue
+        self.assertTrue(self.danisen.in_match["Player1"])  # Player1 is in a match
+        self.assertTrue(self.danisen.in_match["Player2"])  # Player2 is in a match
+
     async def test_report_match(self):
         """Test reporting the result of a match."""
         self.ctx.guild = MagicMock()
