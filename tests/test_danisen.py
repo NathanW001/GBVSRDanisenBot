@@ -3,7 +3,19 @@ import coverage
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from collections import deque
+import logging
+import sys
+import os
 
+# Add the project root directory to sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,  # Set the logging level to DEBUG
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]  # Output logs to the console
+)
 # Mock the discord.commands.slash_command decorator
 def mock_slash_command(*args, **kwargs):
     def decorator(func):
@@ -614,6 +626,58 @@ class TestDanisen(unittest.IsolatedAsyncioTestCase):
         await self.danisen.danisen_stats(self.ctx)
 
         self.ctx.interaction.followup.send.assert_called_once()
-        
+
+    async def test_matchmake_skip_duplicate_and_continue(self):
+        """Test matchmaking skips duplicate matches and continues checking the same dan queue."""
+        self.ctx.interaction = AsyncMock()
+
+        # Player1 (dan3)
+        player1 = {
+            "player_name": "Player1",
+            "discord_id": 12345,
+            "character": "Hyde",
+            "dan": 3,
+            "points": 0
+        }
+        # Player2 (dan3, recent opponent of Player1)
+        player2 = {
+            "player_name": "Player2",
+            "discord_id": 67890,
+            "character": "Linne",
+            "dan": 3,
+            "points": 0
+        }
+        # Player3 (dan3, valid match for Player1)
+        player3 = {
+            "player_name": "Player3",
+            "discord_id": 11223,
+            "character": "Waldstein",
+            "dan": 3,
+            "points": 0
+        }
+
+        # Add players to the matchmaking queue and dans_in_queue
+        self.danisen.matchmaking_queue.extend([player1, player2, player3])
+        self.danisen.dans_in_queue[3].extend([player1, player2, player3])
+        self.danisen.in_queue = {
+            "Player1": [True, deque(["Player2"])],  # Player2 is a recent opponent of Player1
+            "Player2": [True, deque()],
+            "Player3": [True, deque()]
+        }
+
+        # Mock create_match_interaction
+        self.danisen.create_match_interaction = AsyncMock()
+
+        # Run matchmaking
+        await self.danisen.matchmake(self.ctx.interaction)
+
+        # Assertions
+        self.danisen.create_match_interaction.assert_called_once_with(self.ctx.interaction, player1, player3)
+        self.assertFalse(self.danisen.in_queue["Player1"][0])  # Player1 is no longer in queue
+        self.assertFalse(self.danisen.in_queue["Player3"][0])  # Player3 is no longer in queue
+        self.assertTrue(self.danisen.in_match["Player1"])  # Player1 is in a match
+        self.assertTrue(self.danisen.in_match["Player3"])  # Player3 is in a match
+        self.assertTrue(self.danisen.in_queue["Player2"][0])  # Player2 remains in the queue
+
 if __name__ == "__main__":
     unittest.main()

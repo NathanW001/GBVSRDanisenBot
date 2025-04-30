@@ -478,7 +478,7 @@ class Danisen(commands.Cog):
             matchmade = False
             for dan in check_dan:
                 self.logger.debug(f"Checking dan queue for dan {dan}: {list(self.dans_in_queue[dan])}")
-                if self.dans_in_queue[dan]:
+                while self.dans_in_queue[dan]:  # Continue checking the same dan queue
                     daniel2 = self.dans_in_queue[dan].popleft()
                     self.logger.debug(f"Dequeued daniel2 from dans_in_queue[{dan}]: {daniel2}")
 
@@ -501,6 +501,9 @@ class Danisen(commands.Cog):
                     self.in_match[daniel2['player_name']] = True
                     matchmade = True
                     await self.create_match_interaction(ctx, daniel1, daniel2)
+                    break
+
+                if matchmade:
                     break
 
             # Re-add all skipped old_daniels back into the queue
