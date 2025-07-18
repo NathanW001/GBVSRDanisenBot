@@ -42,13 +42,13 @@ class Danisen(commands.Cog):
         self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points, PRIMARY KEY (discord_id, character))")
 
         # Queue and matchmaking setup
-        self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Use deque for dans_in_queue
-        self.matchmaking_queue = deque()  # Use deque for matchmaking_queue
+        self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}
+        self.matchmaking_queue = deque()
         self.max_active_matches = 3
         self.cur_active_matches = 0
-        self.recent_opponents_limit = 2  # Default value, configurable via config
-        self.in_queue = {}  # Format: player_name: [in_queue, deque of last played player names]
-        self.in_match = {}  # Format: player_name: in_match
+        self.recent_opponents_limit = 2
+        self.in_queue = {}  # Format: discord_id: [in_queue, deque of last played discord_ids]
+        self.in_match = {}  # Format: discord_id: in_match
 
     def can_manage_role(self, bot_member, role):
         # Check if the bot can manage a specific role
@@ -349,21 +349,21 @@ class Danisen(commands.Cog):
     #leaves the matchmaking queue
     @discord.commands.slash_command(description="leave the danisen queue")
     async def leave_queue(self, ctx : discord.ApplicationContext):
-        name = ctx.author.name
-        self.logger.info(f"{name} requested to leave the queue")
+        discord_id = ctx.author.id
+        self.logger.info(f"{ctx.author.name} requested to leave the queue")
         daniel = None 
 
         for member in self.matchmaking_queue:
-            if member and (member['player_name'] == name):
-                self.matchmaking_queue.remove(member)  # Remove from deque
+            if member and (member['discord_id'] == discord_id):
+                self.matchmaking_queue.remove(member)
                 daniel = member
                 break
 
         if daniel:
             if daniel in self.dans_in_queue[daniel['dan']]:
-                self.dans_in_queue[daniel['dan']].remove(daniel)  # Remove from deque
+                self.dans_in_queue[daniel['dan']].remove(daniel)
 
-            self.in_queue[daniel['player_name']][0] = False
+            self.in_queue[daniel['discord_id']][0] = False
             await ctx.respond("You have been removed from the queue")
         else:
             await ctx.respond("You are not in queue")
@@ -371,9 +371,10 @@ class Danisen(commands.Cog):
     #joins the matchmaking queue
     @discord.commands.slash_command(description="queue up for danisen games")
     async def join_queue(self, ctx : discord.ApplicationContext,
-                    char : discord.Option(str, autocomplete=character_autocomplete),
-                    rejoin_queue : discord.Option(bool)):
+                    char: discord.Option(str, autocomplete=character_autocomplete),
+                    rejoin_queue: discord.Option(bool)):
         await ctx.defer()
+        discord_id = ctx.author.id
 
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
@@ -385,7 +386,7 @@ class Danisen(commands.Cog):
             return
 
         #Check if valid character
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char}'")
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={discord_id} AND character='{char}'")
         daniel = res.fetchone()
         if daniel == None:
             await ctx.respond(f"You are not registered with that character")
@@ -395,17 +396,17 @@ class Danisen(commands.Cog):
         daniel['requeue'] = rejoin_queue
 
         #Check if in Queue already
-        if ctx.author.name in self.in_queue and self.in_queue[ctx.author.name][0]:
+        if discord_id in self.in_queue and self.in_queue[discord_id][0]:
             await ctx.respond(f"You are already in the queue")
             return
 
         #check if in a match already
-        if ctx.author.name in self.in_match and self.in_match[ctx.author.name]:
+        if discord_id in self.in_match and self.in_match[discord_id]:
             await ctx.respond(f"You are in an active match and cannot queue up")
             return
 
-        self.in_queue.setdefault(ctx.author.name, [True, deque(maxlen=self.recent_opponents_limit)])
-        self.in_match.setdefault(ctx.author.name, False)
+        self.in_queue.setdefault(discord_id, [True, deque(maxlen=self.recent_opponents_limit)])
+        self.in_match.setdefault(discord_id, False)
 
         self.dans_in_queue[daniel['dan']].append(daniel)
         self.matchmaking_queue.append(daniel)
@@ -429,10 +430,10 @@ class Danisen(commands.Cog):
         player['requeue'] = True
 
         # Ensure the player is initialized in self.in_queue
-        if player['player_name'] not in self.in_queue:
-            self.in_queue[player['player_name']] = [False, deque(maxlen=self.recent_opponents_limit)]
+        if player['discord_id'] not in self.in_queue:
+            self.in_queue[player['discord_id']] = [False, deque(maxlen=self.recent_opponents_limit)]
 
-        self.in_queue[player['player_name']][0] = True
+        self.in_queue[player['discord_id']][0] = True
         self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
         self.matchmaking_queue.append(player)
 
@@ -453,7 +454,7 @@ class Danisen(commands.Cog):
                 self.logger.warning("Dequeued daniel1 is None. Skipping iteration.")
                 continue
 
-            self.in_queue[daniel1['player_name']][0] = False
+            self.in_queue[daniel1['discord_id']][0] = False
 
             same_daniel = self.dans_in_queue[daniel1['dan']].popleft()  # Pop from the left of the deque
             self.logger.debug(f"Dequeued same_daniel from dans_in_queue[{daniel1['dan']}]: {same_daniel}")
@@ -482,23 +483,23 @@ class Danisen(commands.Cog):
                     daniel2 = self.dans_in_queue[dan].popleft()
                     self.logger.debug(f"Dequeued daniel2 from dans_in_queue[{dan}]: {daniel2}")
 
-                    if daniel2['player_name'] in self.in_queue[daniel1['player_name']][1]:
+                    if daniel2['discord_id'] in self.in_queue[daniel1['discord_id']][1]:
                         self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents.")
                         old_daniels.append(daniel2)
                         continue
 
-                    self.in_queue[daniel2['player_name']] = [False, deque([daniel1['player_name']], maxlen=self.recent_opponents_limit)]
-                    self.in_queue[daniel1['player_name']][1].append(daniel2['player_name'])
+                    self.in_queue[daniel2['discord_id']] = [False, deque([daniel1['discord_id']], maxlen=self.recent_opponents_limit)]
+                    self.in_queue[daniel1['discord_id']][1].append(daniel2['discord_id'])
 
                     # Clean up the main queue for players that have already been matched
                     for idx in reversed(range(len(self.matchmaking_queue))):
                         player = self.matchmaking_queue[idx]
-                        if player and (player['player_name'] == daniel2['player_name']):
+                        if player and (player['discord_id'] == daniel2['discord_id']):
                             self.logger.debug(f"Removing matched player {player} from matchmaking_queue.")
                             self.matchmaking_queue[idx] = None
 
-                    self.in_match[daniel1['player_name']] = True
-                    self.in_match[daniel2['player_name']] = True
+                    self.in_match[daniel1['discord_id']] = True
+                    self.in_match[daniel2['discord_id']] = True
                     matchmade = True
                     await self.create_match_interaction(ctx, daniel1, daniel2)
                     break
@@ -510,13 +511,13 @@ class Danisen(commands.Cog):
             for old_daniel in old_daniels:
                 self.logger.debug(f"Re-adding skipped daniel {old_daniel} back to dans_in_queue[{old_daniel['dan']}].")
                 self.dans_in_queue[old_daniel['dan']].appendleft(old_daniel)
-                self.in_queue[old_daniel['player_name']][0] = True
+                self.in_queue[old_daniel['discord_id']][0] = True
 
             if not matchmade:
                 self.logger.debug(f"No match found for daniel1 {daniel1}. Re-adding to queues.")
                 self.matchmaking_queue.appendleft(daniel1)  # Append back to the deque
                 self.dans_in_queue[daniel1['dan']].appendleft(daniel1)  # Append back to the deque
-                self.in_queue[daniel1['player_name']][0] = True
+                self.in_queue[daniel1['discord_id']][0] = True
                 break
 
     async def create_match_interaction(self, ctx: discord.Interaction, daniel1, daniel2):

@@ -51,7 +51,8 @@ default_config_dict = {
     "recent_opponents_limit": 2,
     "point_rollover": True,
     "queue_status": True,
-    "max_active_matches": 3  # New parameter
+    "special_rank_up_rules": False,
+    "max_active_matches": 3
 }
 
 # Utility functions for configuration management
@@ -166,6 +167,9 @@ class ConfigTab(QWidget):
         self.queue_status = QCheckBox()
         self.queue_status.setToolTip("whether matchmaking queue is enabled/disabled")
 
+        self.special_rank_up_rules = QCheckBox()
+        self.special_rank_up_rules.setToolTip("Enable special rank-up rules for players 7dan and above")
+
         #Adding fields to form
         self.config_form_layout.addRow("Bot Token:", self.bot_token)
         self.config_form_layout.addRow("Active Match Channel Id:", self.ACTIVE_MATCHES_CHANNEL_ID)
@@ -180,6 +184,7 @@ class ConfigTab(QWidget):
         #add checkboxes
         self.config_form_layout.addRow("Point Rollover:",  self.point_rollover)
         self.config_form_layout.addRow("Matchmaking Queue Status",  self.queue_status)
+        self.config_form_layout.addRow("Special Rank-Up Rules:", self.special_rank_up_rules)
         
         layout.addLayout(self.config_form_layout)
 
@@ -215,6 +220,7 @@ class ConfigTab(QWidget):
             #Bools
             "point_rollover" : self.point_rollover.isChecked(),
             "queue_status" :  self.queue_status.isChecked(),
+            "special_rank_up_rules": self.special_rank_up_rules.isChecked(),
         }
 
     def set_config_dict(self, config):
@@ -228,11 +234,12 @@ class ConfigTab(QWidget):
         self.minimum_derank.setValue(config.get("minimum_derank", 2))
         self.maximum_rank_difference.setValue(config.get("maximum_rank_difference", 1))
         self.rank_gap_for_more_points.setValue(config.get("rank_gap_for_more_points", 1))
-        self.max_active_matches.setValue(config.get("max_active_matches", 3))  # New parameter
+        self.max_active_matches.setValue(config.get("max_active_matches", 3))
+        self.recent_opponents_limit.setValue(config.get("recent_opponents_limit", 5)) 
         #Bools
         self.point_rollover.setChecked(config.get("point_rollover", True))
         self.queue_status.setChecked(config.get("queue_status", True))
-        self.recent_opponents_limit.setValue(config.get("recent_opponents_limit", 5))  # New parameter
+        self.special_rank_up_rules.setChecked(config.get("special_rank_up_rules", False))
 
     def save_config(self):
         """Save configuration to file"""

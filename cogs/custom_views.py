@@ -49,8 +49,8 @@ class MatchSelect(discord.ui.Select):
         self.logger.info(f"cur_active_matches reduced {self.bot.cur_active_matches}")
 
         #remove players from match dict
-        self.bot.in_match[self.p1['player_name']] = False
-        self.bot.in_match[self.p2['player_name']] = False
+        self.bot.in_match[self.p1['discord_id']] = False
+        self.bot.in_match[self.p2['discord_id']] = False
 
         if self.values[0] == "Cancel":
             self.logger.info(f"Match has been cancelled between {self.p1['player_name']} and {self.p2['player_name']}")
