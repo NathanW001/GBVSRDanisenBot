@@ -17,7 +17,7 @@ DEFAULT_POINTS = 0
 
 class Danisen(commands.Cog):
     # Predefined characters and players
-    characters = ["Hyde", "Linne", "Waldstein", "Carmine", "Orie", "Gordeau", "Merkava", "Vatista", "Seth", "Yuzuriha", "Hilda", "Chaos", "Nanase", "Byakuya", "Phonon", "Mika", "Wagner", "Enkidu", "Londrekia", "Tsurugi", "Kaguya", "Kuon", "Uzuki", "Eltnum", "Akatsuki", "Ogre"]
+    characters = ["Hyde", "Linne", "Waldstein", "Carmine", "Orie", "Gordeau", "Merkava", "Vatista", "Seth", "Yuzuriha", "Hilda", "Chaos", "Nanase", "Byakuya", "Phonon", "Mika", "Wagner", "Enkidu", "Londrekia", "Tsurugi", "Kaguya", "Kuon", "Uzuki", "Eltnum", "Akatsuki", "Ogre", "Izumi"]
     players = ["player1", "player2"]
     dan_colours = [
         discord.Colour.from_rgb(255, 255, 255), discord.Colour.from_rgb(255, 255, 0), discord.Colour.from_rgb(255, 153, 0),
