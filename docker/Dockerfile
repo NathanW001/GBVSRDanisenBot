@@ -19,6 +19,7 @@ RUN mkdir -p config
 ENV BOT_TOKEN=""
 ENV CONFIG_PATH=/app/config/config.json
 ENV DB_PATH=/app/config/danisen.db
+ENV PORT=8080
 
 # Volume for persistent data
 VOLUME ["/app/config"]
