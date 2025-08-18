@@ -9,13 +9,6 @@ from constants import DB_PATH, CONFIG_PATH, DEFAULT_CONFIG
 from utils.config import save_config, load_config
 import logging
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.FileHandler('bot.log'), logging.StreamHandler()]
-)
-logger = logging.getLogger(__name__)
 
 #listen for health checks (for Cloud Run)
 async def health_check():
@@ -53,7 +46,16 @@ async def health_check():
         app.ip_count.clear()
 
 async def run_headless():
+    
+    # Set up logging for headless mode
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.FileHandler('bot.log'), logging.StreamHandler()]
+    )
+    logger = logging.getLogger(__name__)
     """Run the bot in headless mode without GUI"""
+
     try:
         # Initialize database connection
         con = sqlite3.connect(DB_PATH)

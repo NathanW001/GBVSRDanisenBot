@@ -17,6 +17,8 @@ def load_config(file_path, default_config=None):
         if os.path.exists(file_path):
             with open(file_path, 'r') as f:
                 return json.load(f)
+        else:
+            logging.warning(f"Config file {file_path} does not exist. Using default config.")
     except Exception as e:
         logging.error(f"Failed to load config: {e}")
     return default_config if default_config is not None else {}

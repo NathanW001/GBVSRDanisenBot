@@ -52,7 +52,6 @@ class MainTab(QWidget):
 
         # Create and configure logger
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
 
         layout = QVBoxLayout(self)
 
@@ -98,6 +97,8 @@ class MainTab(QWidget):
 class ConfigTab(QWidget):
     def __init__(self, bot):
         super().__init__()
+
+        self.logger = logging.getLogger(__name__)
 
         self.bot = bot
         layout = QVBoxLayout(self)
@@ -235,6 +236,7 @@ class ConfigTab(QWidget):
     def load_config(self):
         """Load configuration from file"""
         try:
+            self.logger.info(f"ConfigTab: Loading config from {self.settings_file}")
             config = load_config(self.settings_file)
             self.set_config_dict(config)
         except Exception as e:
@@ -265,7 +267,6 @@ class LogTab(QWidget):
 
         # Create and configure logger
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
 
         # Create text display
         self.text_display = QTextEdit()
@@ -310,7 +311,6 @@ class AdminTab(QWidget):
 
         # Create and configure logger
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
 
         layout = QVBoxLayout(self)
         # Create a button to trigger the save file dialog
@@ -345,6 +345,9 @@ class AdminTab(QWidget):
 class DanisenWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        # Create Log Tab so we dont miss any logs
+        logtab = LogTab()
+
 
         self.con = sqlite3.connect(DB_PATH)
 
@@ -372,10 +375,11 @@ class DanisenWindow(QMainWindow):
         tabs = QTabWidget()
         tabs.setTabPosition(QTabWidget.TabPosition.North)
 
+
         # Add Tabs
         tabs.addTab(MainTab(self.bot), "Main")
         tabs.addTab(ConfigTab(self.bot), "Config")
-        tabs.addTab(LogTab(), "Logs")
+        tabs.addTab(logtab, "Logs")
         tabs.addTab(AdminTab(self.con), "Admin")
         #TODO tabs.addTab(self.create_logs_tab(), "Logs")
 

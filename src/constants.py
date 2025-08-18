@@ -1,8 +1,14 @@
 import os
+import sys
 
+if  hasattr(sys, '_MEIPASS'):  # Running as bundled EXE
+    PROJECT_ROOT = os.path.dirname(sys.executable)
+    CONFIG_DIR = PROJECT_ROOT
+else:  # Running from source
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    CONFIG_DIR = os.path.join(PROJECT_ROOT, 'config')
 # Project paths
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_DIR = os.path.join(PROJECT_ROOT, 'config')
+
 DB_PATH = os.path.join(CONFIG_DIR, 'danisen.db')
 CONFIG_PATH = os.path.join(CONFIG_DIR, 'config.json')
 LOG_FILE = os.path.join(PROJECT_ROOT, 'bot.log')
