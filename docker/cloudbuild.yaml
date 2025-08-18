@@ -7,10 +7,11 @@ steps:
       - '-t'
       - >-
         $_AR_HOSTNAME/$_AR_PROJECT_ID/$_AR_REPOSITORY/$REPO_NAME/$_SERVICE_NAME:$COMMIT_SHA
-      - ..
       - '-f'
-      - docker/Dockerfile
+      - './Dockerfile'
+      - '..'
     id: Build
+    dir: 'docker'  # Set working directory to docker folder
 
     # Push the image
   - name: gcr.io/cloud-builders/docker
