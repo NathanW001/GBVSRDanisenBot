@@ -4,18 +4,16 @@ from cogs.danisen import *
 import json
 import os
 import logging
-
+from constants import CONFIG_PATH
 
 
 def create_bot(con):
-    config_path = "config.json"
-
     intents = discord.Intents.default()
     intents.members = True
 
     bot = discord.Bot(intents=intents)
 
-    bot.add_cog(Danisen(bot,con,config_path))
+    bot.add_cog(Danisen(bot,con,CONFIG_PATH))
 
     # Create and configure logger
     logger = logging.getLogger(__name__)

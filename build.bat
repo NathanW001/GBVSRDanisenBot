@@ -7,5 +7,5 @@ if errorlevel 1 (
 ) else (
     echo PyInstaller is already installed
 )
-.venv\Scripts\activate & pyinstaller --onefile --noconsole gui.py -n DanisenBot
+.venv\Scripts\activate & pyinstaller --onefile --noconsole ./src/gui.py -n DanisenBot
 pause

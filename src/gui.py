@@ -9,6 +9,12 @@ import qasync
 from io import StringIO
 import logging
 import shutil
+from constants import (
+    DB_PATH, CONFIG_PATH, LOG_FILE, DEFAULT_CONFIG, 
+    LOG_COLORS, GUI_WINDOW_TITLE, GUI_MIN_WIDTH, GUI_MIN_HEIGHT
+)
+
+from utils.config import save_config, load_config
 
 # Create our custom stderr that redirects to logging
 class LoggedStderr:
@@ -22,7 +28,7 @@ class LoggedStderr:
 # Centralized logging setup
 def setup_logging():
     logging.basicConfig(
-        filename='bot.log',
+        filename=LOG_FILE,
         filemode='w',
         level=logging.DEBUG,
         format='%(asctime)s - %(levelname)s - %(message)s'
@@ -39,32 +45,6 @@ stderr_logger = logging.getLogger('stderr')
 stderr_logger.setLevel(logging.DEBUG)
 
 sys.stderr = LoggedStderr()
-
-default_config_dict = {
-    "bot_token": "",
-    "ACTIVE_MATCHES_CHANNEL_ID": "0",
-    "REPORTED_MATCHES_CHANNEL_ID": "0",
-    "total_dans": 7,
-    "minimum_derank": 2,
-    "maximum_rank_difference": 1,
-    "rank_gap_for_more_points": 1,
-    "recent_opponents_limit": 2,
-    "point_rollover": True,
-    "queue_status": True,
-    "special_rank_up_rules": False,
-    "max_active_matches": 3
-}
-
-# Utility functions for configuration management
-def load_config(file_path, default_config):
-    if os.path.exists(file_path):
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    return default_config
-
-def save_config(file_path, config):
-    with open(file_path, 'w') as f:
-        json.dump(config, f, indent=4)
 
 class MainTab(QWidget):
     def __init__(self, bot):
@@ -105,7 +85,7 @@ class MainTab(QWidget):
     async def start_bot(self):
         self.logger.info("start_bot")
         try:
-            config = load_config("config.json", default_config_dict)
+            config = load_config(CONFIG_PATH)
             token = config['bot_token']
             await self.bot.start(token)
         except Exception as e:
@@ -200,7 +180,7 @@ class ConfigTab(QWidget):
         #add buttons to layout
         layout.addLayout(self.button_layout)
 
-        self.settings_file = "config.json"
+        self.settings_file = CONFIG_PATH
         self.load_config()
 
     def get_config_dict(self):
@@ -255,19 +235,13 @@ class ConfigTab(QWidget):
     def load_config(self):
         """Load configuration from file"""
         try:
-            config = load_config(self.settings_file, default_config_dict)
+            config = load_config(self.settings_file)
             self.set_config_dict(config)
         except Exception as e:
             QMessageBox.warning(self, "Warning", f"Failed to load configuration: {str(e)}")
 
 class ColoredQTextEditLogger(logging.Handler):
-    COLORS = {
-        logging.DEBUG: 'black',
-        logging.INFO: 'blue',
-        logging.WARNING: 'orange',
-        logging.ERROR: 'red',
-        logging.CRITICAL: 'purple'
-    }
+    COLORS = LOG_COLORS
 
     def __init__(self, text_widget):
         super().__init__()
@@ -353,7 +327,7 @@ class AdminTab(QWidget):
         )
         if file_path:
             try:
-                shutil.copy("danisen.db", file_path)
+                shutil.copy(DB_PATH, file_path)
                 self.logger.info(f"danisen.db file copied to {file_path}")
                 self._reset_player_data()
             except Exception as e:
@@ -371,22 +345,23 @@ class AdminTab(QWidget):
 class DanisenWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.con = sqlite3.connect("danisen.db")
+
+        self.con = sqlite3.connect(DB_PATH)
 
         # Create and configure logger
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
         #Create config file if non-existant
-        self.settings_file = "config.json"
+        self.settings_file = CONFIG_PATH
         if not os.path.exists(self.settings_file):
-            save_config(self.settings_file, default_config_dict)
+            save_config(self.settings_file, DEFAULT_CONFIG)
 
         #Creating DanisenBot
         self.bot = create_bot(self.con)
 
-        self.setWindowTitle("Danisen Bot")
-        self.setMinimumSize(600, 400)
+        self.setWindowTitle(GUI_WINDOW_TITLE)
+        self.setMinimumSize(GUI_MIN_WIDTH, GUI_MIN_HEIGHT)
 
         # Create the central widget and main layout
         central_widget = QWidget()

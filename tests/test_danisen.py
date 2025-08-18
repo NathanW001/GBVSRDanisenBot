@@ -6,6 +6,7 @@ from collections import deque
 import logging
 import sys
 import os
+from src.constants import DB_PATH, CONFIG_PATH
 
 # Add the project root directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -38,7 +39,7 @@ class TestDanisen(unittest.IsolatedAsyncioTestCase):
         self.database.cursor.return_value = self.database_cur
         self.database_con.cursor.return_value = self.database_cur
         self.database_con.commit = MagicMock()
-        self.config_path = "config.json"
+        self.config_path = CONFIG_PATH
 
         # Initialize the Danisen cog
         self.danisen = Danisen(self.bot, self.database_con, self.config_path)

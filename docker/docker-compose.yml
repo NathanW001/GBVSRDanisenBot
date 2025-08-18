@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  danisen-bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ../config:/app/config
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+    restart: unless-stopped

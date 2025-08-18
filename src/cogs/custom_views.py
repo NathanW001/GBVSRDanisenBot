@@ -13,12 +13,12 @@ class MatchSelect(discord.ui.Select):
 
         options = [
             discord.SelectOption(
-                label=f"{p1["player_name"]} {p1["character"]}",
-                description=f"{p1["player_name"]} victory!"
+                label=f"{p1['player_name']} {p1['character']}",
+                description=f"{p1['player_name']} victory!"
             ),
             discord.SelectOption(
-                label=f"{p2["player_name"]} {p2["character"]}",
-                description=f"{p2["player_name"]} victory!"
+                label=f"{p2['player_name']} {p2['character']}",
+                description=f"{p2['player_name']} victory!"
             ),
             discord.SelectOption(
                 label="Cancel",
@@ -57,7 +57,7 @@ class MatchSelect(discord.ui.Select):
             await interaction.respond(f"Match has been cancelled <@{self.p1['discord_id']}> <@{self.p2['discord_id']}> will be not readded to queue")
             await interaction.message.delete()
             return
-        elif self.values[0] == f"{self.p1["player_name"]} {self.p1["character"]}":
+        elif self.values[0] == f"{self.p1['player_name']} {self.p1['character']}":
             await self.bot.report_match_queue(interaction, self.p1, self.p2, "player1")
         else:
             await self.bot.report_match_queue(interaction, self.p1, self.p2, "player2")

@@ -1,0 +1,62 @@
+import argparse
+import asyncio
+import sys
+import os
+from bot import create_bot
+import sqlite3
+from constants import DB_PATH, CONFIG_PATH, DEFAULT_CONFIG
+from utils.config import save_config, load_config
+
+async def run_headless():
+    """Run the bot in headless mode without GUI"""
+    try:
+        # Initialize database connection
+        con = sqlite3.connect(DB_PATH)
+        
+        # Create bot instance
+        bot = create_bot(con)
+        
+        # Load config
+        config = DEFAULT_CONFIG.copy()
+        if not os.path.exists(CONFIG_PATH):
+            save_config(CONFIG_PATH, DEFAULT_CONFIG)
+        else:
+            config = load_config(CONFIG_PATH)
+        # Get token from environment or config
+        bot_token = os.getenv('BOT_TOKEN') or config.get('bot_token')
+        if not bot_token:
+            raise ValueError("Bot token not found. Set BOT_TOKEN environment variable or configure in config.json")
+        else:
+            config.setdefault('bot_token', bot_token)
+
+        # Start the bot
+        await bot.start(bot_token)
+        
+    except Exception as e:
+        print(f"Error in headless mode: {e}")
+        sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser(description='Danisen Bot')
+    parser.add_argument('--headless', action='store_true', help='Run in headless mode without GUI')
+    args = parser.parse_args()
+
+    if args.headless:
+        asyncio.run(run_headless())
+    else:
+        from PyQt6.QtWidgets import QApplication
+        from gui import DanisenWindow
+        import qasync
+
+        app = QApplication(sys.argv)
+        loop = qasync.QEventLoop(app)
+        asyncio.set_event_loop(loop)
+        
+        window = DanisenWindow()
+        window.show()
+        
+        with loop:
+            loop.run_forever()
+
+if __name__ == '__main__':
+    main()
