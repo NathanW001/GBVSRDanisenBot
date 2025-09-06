@@ -8,8 +8,8 @@ import sys
 import os
 from src.constants import DB_PATH, CONFIG_PATH
 
-# Add the project root directory to sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add the project src directory to sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
 # Configure logging
 logging.basicConfig(
@@ -680,5 +680,54 @@ class TestDanisen(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.danisen.in_match[11223])  # Player3 is in a match
         self.assertTrue(self.danisen.in_queue[67890][0])  # Player2 remains in the queue
 
-if __name__ == "__main__":
-    unittest.main()
+    async def test_score_update_special_rank_rules(self):
+        """Test special rank up rules for high-ranked players."""
+        self.ctx.guild = MagicMock()
+        self.ctx.guild.get_member = MagicMock(return_value=self.ctx.author)
+        self.ctx.guild.roles = [MagicMock(name="Dan 8"), MagicMock(name="Dan 9")]
+
+        # Mock config to enable special rank rules
+        mock_config = {"special_rank_up_rules": True}
+        with patch("builtins.open", unittest.mock.mock_open(read_data=json.dumps(mock_config))):
+            with patch("os.path.exists", return_value=True):
+                self.danisen.update_config()
+
+        # Test case 1: High-rank player vs high-rank player (should allow rankup)
+        winner = {"player_name": "Winner", "discord_id": 12345, "dan": 8, "points": 4, "character": "Hyde"}
+        loser = {"player_name": "Loser", "discord_id": 67890, "dan": 8, "points": 0, "character": "Linne"}
+
+        winner_rank, loser_rank = await self.danisen.score_update(self.ctx, winner, loser)
+        self.assertEqual(winner_rank, [9, 0], "High-rank player should rank up when beating another high-rank player")
+
+        # Test case 2: High-rank player vs low-rank player (should not allow rankup)
+        winner = {"player_name": "Winner", "discord_id": 12345, "dan": 8, "points": 4, "character": "Hyde"}
+        loser = {"player_name": "Loser", "discord_id": 67890, "dan": 4, "points": 0, "character": "Linne"}
+
+        winner_rank, loser_rank = await self.danisen.score_update(self.ctx, winner, loser)
+        self.assertEqual(winner_rank, [8, 4], "High-rank player should not rank up when beating a low-rank player")
+
+        # Test case 3: Low-rank player vs any player (normal rules apply)
+        winner = {"player_name": "Winner", "discord_id": 12345, "dan": 4, "points": 2, "character": "Hyde"}
+        loser = {"player_name": "Loser", "discord_id": 67890, "dan": 4, "points": 0, "character": "Linne"}
+
+        winner_rank, loser_rank = await self.danisen.score_update(self.ctx, winner, loser)
+        self.assertEqual(winner_rank, [5, 0], "Low-rank player should follow normal rankup rules")
+
+    async def test_score_update_special_rank_rules_disabled(self):
+        """Test rank up behavior when special rank rules are disabled."""
+        self.ctx.guild = MagicMock()
+        self.ctx.guild.get_member = MagicMock(return_value=self.ctx.author)
+        self.ctx.guild.roles = [MagicMock(name="Dan 8"), MagicMock(name="Dan 9")]
+
+        # Mock config to disable special rank rules
+        mock_config = {"special_rank_up_rules": False}
+        with patch("builtins.open", unittest.mock.mock_open(read_data=json.dumps(mock_config))):
+            with patch("os.path.exists", return_value=True):
+                self.danisen.update_config()
+
+        # High-rank player vs low-rank player (should allow rankup when rules disabled)
+        winner = {"player_name": "Winner", "discord_id": 12345, "dan": 8, "points": 4, "character": "Hyde"}
+        loser = {"player_name": "Loser", "discord_id": 67890, "dan": 6, "points": 0, "character": "Linne"}
+
+        winner_rank, loser_rank = await self.danisen.score_update(self.ctx, winner, loser)
+        self.assertEqual(winner_rank, [9, 0], "High-rank player should rank up normally when special rules are disabled")

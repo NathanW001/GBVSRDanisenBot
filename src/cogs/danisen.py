@@ -4,16 +4,7 @@ from cogs.database import *
 from cogs.custom_views import *
 import os
 from collections import deque
-
-# Constants
-MAX_FIELDS_PER_EMBED = 25
-MAX_DAN_RANK = 12
-SPECIAL_RANK_THRESHOLD = 7
-RANKUP_POINTS_NORMAL = 3
-RANKUP_POINTS_SPECIAL = 5
-RANKDOWN_POINTS = -3
-DEFAULT_DAN = 1
-DEFAULT_POINTS = 0
+from constants import *
 
 class Danisen(commands.Cog):
     # Predefined characters and players
@@ -75,6 +66,7 @@ class Danisen(commands.Cog):
         self.queue_status = config.get('queue_status', True)
         self.recent_opponents_limit = config.get('recent_opponents_limit', 2)
         self.max_active_matches = config.get('max_active_matches', 3)  # New parameter
+        self.special_rank_up_rules = config.get('special_rank_up_rules', False)
 
     @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
     @discord.commands.default_permissions(manage_roles=True)
@@ -109,7 +101,7 @@ class Danisen(commands.Cog):
         rankup = False
 
         # Determine rankup points based on rank type
-        rankup_points = RANKUP_POINTS_NORMAL if winner_rank[0] <= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_SPECIAL
+        rankup_points = RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
 
         # Winning logic
         if winner_rank[0] > loser_rank[0] + self.maximum_rank_difference:
@@ -126,11 +118,22 @@ class Danisen(commands.Cog):
         elif loser_rank[1] > 0:
             loser_rank[1] -= 1
 
-        # Rankup logic
+        # Rankup logic with special rules
         if winner_rank[1] >= rankup_points:
-            winner_rank[0] += 1
-            winner_rank[1] = winner_rank[1] % rankup_points if self.point_rollover else 0
-            rankup = True
+            can_rankup = True
+            
+            # Check special rank rules
+            if self.special_rank_up_rules and winner_rank[0] >= SPECIAL_RANK_THRESHOLD:
+                # Can only rank up by beating another high-ranked player
+                can_rankup = loser_rank[0] >= SPECIAL_RANK_THRESHOLD
+                if not can_rankup:
+                    # Reset points to rankup_points - 1 if can't rank up
+                    winner_rank[1] = rankup_points - 1
+            
+            if can_rankup:
+                winner_rank[0] += 1
+                winner_rank[1] = winner_rank[1] % rankup_points if self.point_rollover else 0
+                rankup = True
 
         # Rankdown logic
         if loser_rank[1] <= RANKDOWN_POINTS:
