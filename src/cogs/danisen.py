@@ -1,4 +1,4 @@
-import discord, sqlite3, asyncio
+import discord, sqlite3, asyncio, json, logging
 from discord.ext import commands, pages
 from cogs.database import *
 from cogs.custom_views import *
@@ -674,6 +674,136 @@ class Danisen(commands.Cog):
         if (self.cur_active_matches < self.max_active_matches and
         len(self.matchmaking_queue) >= 2):
             await self.matchmake(ctx.interaction)
+
+    @discord.commands.slash_command(description="View current bot configuration (admin)")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def view_config(self, ctx: discord.ApplicationContext):
+        """Displays the current configuration loaded from the config file."""
+        # Try to load the raw config file so user can see exactly what's persisted
+        config = {}
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    config = json.load(f)
+        except Exception as e:
+            self.logger.warning(f"Failed to load configuration for view: {e}")
+
+        # Fallback to runtime attributes if some keys are missing
+        merged = dict(DEFAULT_CONFIG)
+        merged.update(config)
+        # Also include some runtime-derived values
+        merged['max_active_matches'] = self.max_active_matches
+        merged['queue_status'] = self.queue_status
+        merged['total_dans'] = self.total_dans
+
+        em = discord.Embed(title="Current Configuration", color=discord.Color.blurple())
+        for k, v in merged.items():
+            em.add_field(name=str(k), value=str(v), inline=False)
+
+        await ctx.respond(embed=em, ephemeral=True)
+
+    @discord.commands.slash_command(description="Set a configuration key (admin)")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def set_config(self, ctx: discord.ApplicationContext,
+                         key: discord.Option(str, choices=[
+                             "ACTIVE_MATCHES_CHANNEL_ID", "REPORTED_MATCHES_CHANNEL_ID",
+                             "total_dans", "minimum_derank", "maximum_rank_difference",
+                             "rank_gap_for_more_points", "point_rollover", "queue_status",
+                             "recent_opponents_limit", "max_active_matches", "special_rank_up_rules"
+                         ]),
+                         value: discord.Option(str)):
+        """Update a single configuration key and persist it to disk."""
+        # Load existing config
+        cfg = dict(DEFAULT_CONFIG)
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, 'r') as f:
+                    loaded = json.load(f)
+                    cfg.update(loaded)
+        except Exception as e:
+            self.logger.warning(f"Failed to load existing config while setting key: {e}")
+
+        # Determine expected type from DEFAULT_CONFIG when possible
+        expected = DEFAULT_CONFIG.get(key, None)
+
+        def parse_to_expected(val_str, expected_default):
+            # If DEFAULT_CONFIG provides a default, use its type
+            if expected_default is not None:
+                target_type = type(expected_default)
+            else:
+                # Fallback heuristics
+                if key.upper().endswith('CHANNEL_ID') or 'CHANNEL' in key.upper():
+                    target_type = str
+                elif key in ('point_rollover', 'queue_status', 'special_rank_up_rules'):
+                    target_type = bool
+                else:
+                    # default to int for most numeric-like config options
+                    target_type = int
+
+            s = val_str.strip()
+            # Booleans
+            if target_type is bool:
+                low = s.lower()
+                if low in ('true', '1', 'yes', 'on'):
+                    return True
+                if low in ('false', '0', 'no', 'off'):
+                    return False
+                # try JSON parse
+                try:
+                    parsed = json.loads(s)
+                    if isinstance(parsed, bool):
+                        return parsed
+                except Exception:
+                    pass
+                # fallback: non-empty string => True
+                return bool(s)
+
+            # Integers
+            if target_type is int:
+                try:
+                    return int(s)
+                except Exception:
+                    try:
+                        parsed = json.loads(s)
+                        if isinstance(parsed, (int, float)):
+                            return int(parsed)
+                    except Exception:
+                        pass
+                    # final fallback: 0
+                    return 0
+
+            # Strings
+            if target_type is str:
+                return s
+
+            # Fallback: try json then return raw string
+            try:
+                return json.loads(s)
+            except Exception:
+                return s
+
+        parsed_value = parse_to_expected(value, expected)
+
+        # Store the parsed value
+        cfg[key] = parsed_value
+
+        # Ensure the config dir exists and write back
+        try:
+            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+            with open(self.config_path, 'w') as f:
+                json.dump(cfg, f, indent=4)
+        except Exception as e:
+            self.logger.error(f"Failed to persist configuration: {e}")
+            await ctx.respond(f"Failed to persist configuration: {e}")
+            return
+
+        # Reload runtime config
+        try:
+            self.update_config()
+        except Exception as e:
+            self.logger.warning(f"update_config failed after setting config: {e}")
+
+        await ctx.respond(f"Configuration key `{key}` updated to `{parsed_value}`", ephemeral=True)
 
     def get_player(self, player_name, character):
         res = self.database_cur.execute(
