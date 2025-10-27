@@ -8,7 +8,7 @@ from constants import *
 
 class Danisen(commands.Cog):
     # Predefined characters and players
-    characters = ["Hyde", "Linne", "Waldstein", "Carmine", "Orie", "Gordeau", "Merkava", "Vatista", "Seth", "Yuzuriha", "Hilda", "Chaos", "Nanase", "Byakuya", "Phonon", "Mika", "Wagner", "Enkidu", "Londrekia", "Tsurugi", "Kaguya", "Kuon", "Uzuki", "Eltnum", "Akatsuki", "Ogre", "Izumi"]
+    characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "AvatarBelial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
     players = ["player1", "player2"]
     dan_colours = [
         discord.Colour.from_rgb(255, 255, 255), discord.Colour.from_rgb(255, 255, 0), discord.Colour.from_rgb(255, 153, 0),
@@ -214,6 +214,7 @@ class Danisen(commands.Cog):
                         # fallbacks to the command name incase command description is not defined
 
         await ctx.send_response(embed=em)
+
     #registers player+char to db
     @discord.commands.slash_command(description="Register to the Danisen database!")
     async def register(self, ctx: discord.ApplicationContext,

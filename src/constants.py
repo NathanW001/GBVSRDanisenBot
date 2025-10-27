@@ -1,5 +1,6 @@
 import os
 import sys
+import dotenv
 
 if  hasattr(sys, '_MEIPASS'):  # Running as bundled EXE
     PROJECT_ROOT = os.path.dirname(sys.executable)
@@ -13,13 +14,16 @@ DB_PATH = os.path.join(CONFIG_DIR, 'danisen.db')
 CONFIG_PATH = os.path.join(CONFIG_DIR, 'config.json')
 LOG_FILE = os.path.join(PROJECT_ROOT, 'bot.log')
 
+# Load TOKEN from dotenv
+dotenv.load_dotenv()
+
 # Default configuration
 DEFAULT_CONFIG = {
-    "bot_token": "",
+    "bot_token": str(os.getenv("TOKEN")),
     "ACTIVE_MATCHES_CHANNEL_ID": "0",
     "REPORTED_MATCHES_CHANNEL_ID": "0",
-    "total_dans": 7,
-    "minimum_derank": 2,
+    "total_dans": 12,
+    "minimum_derank": 1,
     "maximum_rank_difference": 1,
     "rank_gap_for_more_points": 1,
     "recent_opponents_limit": 2,
