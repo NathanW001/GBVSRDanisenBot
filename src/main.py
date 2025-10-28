@@ -8,6 +8,7 @@ import sqlite3
 from constants import DB_PATH, CONFIG_PATH, DEFAULT_CONFIG
 from utils.config import save_config, load_config
 import logging
+from dotenv import load_dotenv
 
 
 #listen for health checks (for Cloud Run)
@@ -69,6 +70,9 @@ async def run_headless():
             save_config(CONFIG_PATH, DEFAULT_CONFIG)
         else:
             config = load_config(CONFIG_PATH)
+
+        # Load token from dotenv, if exists
+        load_dotenv()
 
         # Get token from environment or config
         bot_token = os.getenv('BOT_TOKEN') or config.get('bot_token')
