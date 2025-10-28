@@ -9,7 +9,7 @@ from constants import *
 class Danisen(commands.Cog):
     # Predefined characters and players
     characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "AvatarBelial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
-    players = ["player1", "player2"]
+    players = []
     dan_colours = [
         discord.Colour.from_rgb(255, 255, 255), discord.Colour.from_rgb(255, 255, 0), discord.Colour.from_rgb(255, 153, 0),
         discord.Colour.from_rgb(39, 78, 19), discord.Colour.from_rgb(97, 0, 162), discord.Colour.from_rgb(0, 0, 177), discord.Colour.from_rgb(120, 63, 4),
@@ -78,9 +78,9 @@ class Danisen(commands.Cog):
             self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Reset to empty deques
             self.in_queue = {}
             self.in_match = {}
-            await ctx.respond("The matchmaking queue has been disabled")
+            await ctx.respond("The matchmaking queue has been disabled.")
         else:
-            await ctx.respond("The matchmaking queue has been enabled")
+            await ctx.respond("The matchmaking queue has been enabled.")
 
     def dead_role(self, ctx, player):
         # Check if a player's dan role should be removed
@@ -218,8 +218,10 @@ class Danisen(commands.Cog):
     #registers player+char to db
     @discord.commands.slash_command(description="Register to the Danisen database!")
     async def register(self, ctx: discord.ApplicationContext,
-                       char1: discord.Option(str, autocomplete=character_autocomplete)):
-        player_name = ctx.author.name
+                       char1: discord.Option(str, name="character", autocomplete=character_autocomplete)):
+        player_username = ctx.author.name
+        player_nickname = ctx.author.nick if ctx.author.nick != None else ctx.author.name
+        player_discord_id = ctx.author.id
 
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
@@ -228,12 +230,24 @@ class Danisen(commands.Cog):
         # Check if the player is already registered with the character
         res = self.database_cur.execute(
             "SELECT * FROM players WHERE discord_id = ? AND character = ?",
-            (ctx.author.id, char1)
+            (player_discord_id, char1)
         ).fetchone()
 
         if res:
             await ctx.respond(f"You are already registered with the character {char1}.")
             return
+
+        # Check if the player has three characters already registered
+        res = self.database_cur.execute(
+            "SELECT COUNT(*) AS char_count FROM players WHERE discord_id = ?",
+            (player_discord_id,)
+        ).fetchone()
+
+        self.logger.info(f"Player has {res["char_count"]} characters.")
+
+        if res["char_count"] >= 3:
+            await ctx.respond(f"You are already registered with 3 characters. Please unregister one of your characters before registering a new character.")
+            return        
 
         # Insert the new player record
         line = (ctx.author.id, player_name, char1, DEFAULT_DAN, DEFAULT_POINTS)
@@ -261,8 +275,8 @@ class Danisen(commands.Cog):
             self.logger.warning("Could not add roles due to bot's role being too low")
 
         await ctx.respond(
-            f"You are now registered as {player_name} with the following character/s {char1}\n"
-            "If you wish to add more characters, you can register multiple times!\n\n"
+            f"You are now registered as {player_nickname (player_username)} with {char1}!\n"
+            "If you wish to add more characters, you can register with up to 3 different characters!\n\n"
             "Welcome to the Danisen!"
         )
 
@@ -444,6 +458,11 @@ class Danisen(commands.Cog):
     @discord.commands.slash_command(description="view players in the queue")
     async def view_queue(self, ctx : discord.ApplicationContext):
         await ctx.respond(f"Current full MMQ {self.matchmaking_queue}\nCurrent full DanQ {self.dans_in_queue}")
+
+    @discord.commands.slash_command(description="Start matchmaking.")
+    async def start_matchmaking(self, ctx: discord.ApplicationContext):
+        await self.matchmake(ctx.interaction)
+        await ctx.respond("Finished matchmaking")
 
     async def matchmake(self, ctx: discord.Interaction):
         while (self.cur_active_matches < self.max_active_matches and
