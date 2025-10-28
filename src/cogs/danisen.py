@@ -38,7 +38,7 @@ class Danisen(commands.Cog):
         self.max_active_matches = 3
         self.cur_active_matches = 0
         self.recent_opponents_limit = 2
-        self.in_queue = {}  # Format: discord_id: [in_queue, deque of last played discord_ids]
+        self.in_queue = {}  # Format: discord_id: [in_queue, character, deque of last played discord_ids]
         self.in_match = {}  # Format: discord_id: in_match
 
     def can_manage_role(self, bot_member, role):
@@ -84,9 +84,10 @@ class Danisen(commands.Cog):
 
     def dead_role(self, ctx, player):
         # Check if a player's dan role should be removed
+        # With multiple characters, it will keep only the highest dan rank among all of them
         role = None
         self.logger.info(f'Checking if dan should be removed as well')
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan={player['dan']}")
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan>={player['dan']}")
         remaining_daniel = res.fetchone()
         if not remaining_daniel:
             self.logger.info(f"Dan role {player['dan']} will be removed")
@@ -158,7 +159,7 @@ class Danisen(commands.Cog):
             bot_member = ctx.guild.get_member(self.bot.user.id)
             if role and self.can_manage_role(bot_member, role):
                 await member.add_roles(role)
-            role = self.dead_role(ctx, winner)
+            role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0] - 1}") # this could cause issues, but should be fine as long as you can't rank up twice in one game
             if role and self.can_manage_role(bot_member, role):
                 await member.remove_roles(role)
 
@@ -219,9 +220,11 @@ class Danisen(commands.Cog):
     @discord.commands.slash_command(description="Register to the Danisen database!")
     async def register(self, ctx: discord.ApplicationContext,
                        char1: discord.Option(str, name="character", autocomplete=character_autocomplete)):
-        player_username = ctx.author.name
-        player_nickname = ctx.author.nick if ctx.author.nick != None else ctx.author.name
+        player_name = ctx.author.name
+        player_nickname = ctx.author.nick if ctx.author.nick != None else ctx.author.global_name if ctx.author.global_name != None else ctx.author.name
         player_discord_id = ctx.author.id
+
+        self.logger.info(f"player nickname is {ctx.author.nick}, player global name is {ctx.author.global_name}")
 
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
@@ -257,6 +260,7 @@ class Danisen(commands.Cog):
         )
         self.database_con.commit()
 
+        # Get Discord roles to add to participant
         role_list = []
         char_role = discord.utils.get(ctx.guild.roles, name=char1)
         if char_role:
@@ -267,6 +271,10 @@ class Danisen(commands.Cog):
         if dan_role:
             role_list.append(dan_role)
 
+        participant_role = discord.utils.get(ctx.guild.roles, name="Danisen Participant")
+        if participant_role:
+            role_list.append(participant_role)
+
         bot_member = ctx.guild.get_member(self.bot.user.id)
         can_add_roles = all(self.can_manage_role(bot_member, role) for role in role_list)
         if can_add_roles:
@@ -275,14 +283,14 @@ class Danisen(commands.Cog):
             self.logger.warning("Could not add roles due to bot's role being too low")
 
         await ctx.respond(
-            f"You are now registered as {player_nickname (player_username)} with {char1}!\n"
+            f"You are now registered as {player_nickname} ({player_name}) with {char1}!\n"
             "If you wish to add more characters, you can register with up to 3 different characters!\n\n"
             "Welcome to the Danisen!"
         )
 
     @discord.commands.slash_command(description="unregister to the Danisen database!")
     async def unregister(self, ctx : discord.ApplicationContext, 
-                    char1 : discord.Option(str, autocomplete=character_autocomplete)):
+                    char1 : discord.Option(str, name="character", autocomplete=character_autocomplete)):
 
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
@@ -309,6 +317,7 @@ class Danisen(commands.Cog):
         self.database_cur.execute(f"DELETE FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
         self.database_con.commit()
 
+        # Get roles to remove from participant, if they have them.
         role_list = []
         char_role = discord.utils.get(ctx.guild.roles, name=char1)
         if char_role:
@@ -319,6 +328,12 @@ class Danisen(commands.Cog):
         if role:
             role_list.append(role)
 
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id=?", (ctx.author.id,)).fetchone()
+        if res is None:
+            participant_role = discord.utils.get(ctx.guild.roles, name="Danisen Participant")
+            if char_role:
+                role_list.append(discord.utils.get(ctx.guild.roles, name="Danisen Participant"))
+ 
         bot_member = ctx.guild.get_member(self.bot.user.id)
         can_remove_roles = True
         message_text = ""
@@ -414,8 +429,8 @@ class Danisen(commands.Cog):
         daniel['requeue'] = rejoin_queue
 
         #Check if in Queue already
-        if discord_id in self.in_queue and self.in_queue[discord_id][0]:
-            await ctx.respond(f"You are already in the queue")
+        if discord_id in self.in_queue and self.in_queue[discord_id][0] and self.in_queue[discord_id][1] == daniel["character"]:
+            await ctx.respond(f"You are already in the queue as that character")
             return
 
         #check if in a match already
@@ -423,7 +438,7 @@ class Danisen(commands.Cog):
             await ctx.respond(f"You are in an active match and cannot queue up")
             return
 
-        self.in_queue.setdefault(discord_id, [True, deque(maxlen=self.recent_opponents_limit)])
+        self.in_queue.setdefault(discord_id, [True, daniel["character"], deque(maxlen=self.recent_opponents_limit)])
         self.in_match.setdefault(discord_id, False)
 
         self.dans_in_queue[daniel['dan']].append(daniel)
@@ -449,7 +464,7 @@ class Danisen(commands.Cog):
 
         # Ensure the player is initialized in self.in_queue
         if player['discord_id'] not in self.in_queue:
-            self.in_queue[player['discord_id']] = [False, deque(maxlen=self.recent_opponents_limit)]
+            self.in_queue[player['discord_id']] = [False, player['character'], deque(maxlen=self.recent_opponents_limit)]
 
         self.in_queue[player['discord_id']][0] = True
         self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
@@ -506,13 +521,24 @@ class Danisen(commands.Cog):
                     daniel2 = self.dans_in_queue[dan].popleft()
                     self.logger.debug(f"Dequeued daniel2 from dans_in_queue[{dan}]: {daniel2}")
 
-                    if daniel2['discord_id'] in self.in_queue[daniel1['discord_id']][1]:
+                    if daniel2['discord_id'] in self.in_queue[daniel1['discord_id']][2]:
                         self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents.")
                         old_daniels.append(daniel2)
                         continue
+                    
+                    if daniel2['discord_id'] == daniel1['discord_id']:
+                        self.logger.debug(f"Skipping daniel2 {daniel2} as they are the same user on different characters.")
+                        old_daniels.append(daniel2)
+                        continue
 
-                    self.in_queue[daniel2['discord_id']] = [False, deque([daniel1['discord_id']], maxlen=self.recent_opponents_limit)]
-                    self.in_queue[daniel1['discord_id']][1].append(daniel2['discord_id'])
+                    if daniel2['discord_id'] in self.in_match and self.in_match[daniel2['discord_id']]:
+                        self.logger.debug(f"Skipping daniel2 {daniel2} as they are currently in a match as a different character.")
+                        old_daniels.append(daniel2)
+                        continue
+
+
+                    self.in_queue[daniel2['discord_id']] = [False, daniel2['character'], deque([daniel1['discord_id']], maxlen=self.recent_opponents_limit)] # why does this do this instead of just mutate
+                    self.in_queue[daniel1['discord_id']][2].append(daniel2['discord_id'])
 
                     # Clean up the main queue for players that have already been matched
                     for idx in reversed(range(len(self.matchmaking_queue))):
