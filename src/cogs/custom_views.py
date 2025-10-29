@@ -13,16 +13,16 @@ class MatchSelect(discord.ui.Select):
 
         options = [
             discord.SelectOption(
-                label=f"{p1['player_name']} {p1['character']}",
-                description=f"{p1['player_name']} victory!"
+                label=f"{p1['player_name']} ({p1['character']})",
+                description=f"{p1['player_name']}'s victory!"
             ),
             discord.SelectOption(
-                label=f"{p2['player_name']} {p2['character']}",
-                description=f"{p2['player_name']} victory!"
+                label=f"{p2['player_name']} ({p2['character']})",
+                description=f"{p2['player_name']}'s victory!"
             ),
             discord.SelectOption(
-                label="Cancel",
-                description="Cancel the match"
+                label="Cancel Match",
+                description="Cancel the match. This will remove both players from the queue."
             )
         ]
     
@@ -52,9 +52,9 @@ class MatchSelect(discord.ui.Select):
         self.bot.in_match[self.p1['discord_id']] = False
         self.bot.in_match[self.p2['discord_id']] = False
 
-        if self.values[0] == "Cancel":
+        if self.values[0] == "Cancel Match":
             self.logger.info(f"Match has been cancelled between {self.p1['player_name']} and {self.p2['player_name']}")
-            await interaction.respond(f"Match has been cancelled <@{self.p1['discord_id']}> <@{self.p2['discord_id']}> will be not readded to queue")
+            await interaction.respond(f"The match between <@{self.p1['discord_id']}>'s {self.p1['character']} and <@{self.p2['discord_id']}>'s {self.p2['character']} has been cancelled, and these player's characters will not be readded to the queue. Please rejoin the queue with these characters if you wish to keep matching.")
             await interaction.message.delete()
             return
         elif self.values[0] == f"{self.p1['player_name']} {self.p1['character']}":
@@ -67,35 +67,35 @@ class MatchSelect(discord.ui.Select):
         if self.p2['requeue']:
             self.bot.rejoin_queue(self.p2)
 
-        await self.bot.matchmake(interaction)
+        # await self.bot.matchmake(interaction) # disabling automatic matchmaking
 
 
         await interaction.message.delete()
 
 class MatchView(discord.ui.View):
-    json_path = r"C:\\Users\Deled\Desktop\Danisen\\_overlays\streamcontrol.json"
+    # json_path = r"C:\\Users\Deled\Desktop\Danisen\\_overlays\streamcontrol.json"
     def __init__(self, bot, p1, p2):
         super().__init__(timeout=None)
         self.p1 = p1
         self.p2 = p2
         self.add_item(MatchSelect(bot, p1, p2))
     
-    @discord.ui.button(label="Update Stream", style=discord.ButtonStyle.primary)
-    async def button_callback(self, button, interaction):
-        await interaction.response.defer()
-        if not interaction.user.guild_permissions.administrator:
-            return
+    # @discord.ui.button(label="Update Stream", style=discord.ButtonStyle.primary)
+    # async def button_callback(self, button, interaction):
+    #     await interaction.response.defer()
+    #     if not interaction.user.guild_permissions.administrator:
+    #         return
 
-        with open(self.json_path, "r+") as f:
-            overlay = json.load(f)
-            overlay["mText1"] = self.p1["character"]
-            overlay["mText2"] = self.p2["character"]
-            overlay["p1Name"] = self.p1["player_name"]
-            overlay["p1Score"] = 0
-            overlay["p2Name"] = self.p2["player_name"]
-            overlay["p2Score"] = 0
-            f.seek(0)
-            f.truncate(0)
-            json.dump(overlay,f)
+    #     with open(self.json_path, "r+") as f:
+    #         overlay = json.load(f)
+    #         overlay["mText1"] = self.p1["character"]
+    #         overlay["mText2"] = self.p2["character"]
+    #         overlay["p1Name"] = self.p1["player_name"]
+    #         overlay["p1Score"] = 0
+    #         overlay["p2Name"] = self.p2["player_name"]
+    #         overlay["p2Score"] = 0
+    #         f.seek(0)
+    #         f.truncate(0)
+    #         json.dump(overlay,f)
 
-        await interaction.respond("Stream Updated") 
+    #     await interaction.respond("Stream Updated") 
