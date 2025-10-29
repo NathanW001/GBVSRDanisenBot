@@ -96,22 +96,24 @@ def main():
     parser.add_argument('--headless', action='store_true', help='Run in headless mode without GUI')
     args = parser.parse_args()
 
-    if args.headless:
-        asyncio.run(run_headless())
-    else:
-        from PyQt6.QtWidgets import QApplication
-        from gui import DanisenWindow
-        import qasync
+    # if args.headless:
+    asyncio.run(run_headless())
+    
+    # I'm commenting out the option of running with a gui, feel free to put it back
+    # else:
+    #     from PyQt6.QtWidgets import QApplication
+    #     from gui import DanisenWindow
+    #     import qasync
 
-        app = QApplication(sys.argv)
-        loop = qasync.QEventLoop(app)
-        asyncio.set_event_loop(loop)
+    #     app = QApplication(sys.argv)
+    #     loop = qasync.QEventLoop(app)
+    #     asyncio.set_event_loop(loop)
         
-        window = DanisenWindow()
-        window.show()
+    #     window = DanisenWindow()
+    #     window.show()
         
-        with loop:
-            loop.run_forever()
+    #     with loop:
+    #         loop.run_forever()
 
 if __name__ == '__main__':
     main()
