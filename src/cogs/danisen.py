@@ -5,6 +5,7 @@ from cogs.custom_views import *
 import os
 from collections import deque
 from constants import *
+from random import shuffle
 
 class Danisen(commands.Cog):
     # Predefined characters and players
@@ -38,7 +39,7 @@ class Danisen(commands.Cog):
         self.max_active_matches = 3
         self.cur_active_matches = 0
         self.recent_opponents_limit = 2
-        self.in_queue = {}  # Format: discord_id: [in_queue, character, deque of last played discord_ids]
+        self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
         self.in_match = {}  # Format: discord_id: in_match
 
     def can_manage_role(self, bot_member, role):
@@ -68,7 +69,7 @@ class Danisen(commands.Cog):
         self.max_active_matches = config.get('max_active_matches', 3)  # New parameter
         self.special_rank_up_rules = config.get('special_rank_up_rules', False)
 
-    @discord.commands.slash_command(description="Close or open the MM queue (admin debug cmd)")
+    @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
     @discord.commands.default_permissions(manage_roles=True)
     async def set_queue(self, ctx: discord.ApplicationContext, queue_status: discord.Option(bool)):
         # Enable or disable the matchmaking queue
@@ -184,7 +185,7 @@ class Danisen(commands.Cog):
         names = set([name[0] for name in name_list])
         return [name for name in names if (name.lower()).startswith(ctx.value.lower())]
 
-    @discord.commands.slash_command(description="set a players rank (admin debug cmd)")
+    @discord.commands.slash_command(name="setrank", description="[Admin Command] Set a player's dan rank and points.")
     @discord.commands.default_permissions(manage_roles=True)
     async def set_rank(self, ctx : discord.ApplicationContext,
                         player_name :  discord.Option(str, autocomplete=player_autocomplete),
@@ -198,21 +199,27 @@ class Danisen(commands.Cog):
         self.database_con.commit()
         await ctx.respond(f"{player_name}'s {char} rank updated to be dan {dan} points {points}")
 
-    @discord.commands.slash_command(description="help msg")
+    @discord.commands.slash_command(description="Displays a help message and a list of commands.")
     async def help(self, ctx : discord.ApplicationContext):
         em = discord.Embed(
-            title="Help",
-            description="list of all commands",
+            title="GBVSR Danisen Bot Command List",
+            description="Below is a list of all commands for the GBVSR Danisen Bot. For more information about Danisen, visit <#1432872071666602127>.",
             color=discord.Color.blurple())
-        if self.bot.user.avatar.url:
-            em.set_thumbnail(
-                url=self.bot.user.avatar.url)
-
+        # if self.bot.user.avatar.url: # I dont really like the way the thumbnail looks lol
+        #     em.set_thumbnail(
+        #         url=self.bot.user.avatar.url)
+        self.logger.debug(f"author is {ctx.author}, perms are {ctx.author.guild_permissions}, role specific perm is {ctx.author.guild_permissions.manage_roles}")
         for slash_command in self.walk_commands():
-            em.add_field(name=slash_command.name, 
-                        value=slash_command.description if slash_command.description else slash_command.name, 
-                        inline=False) 
-                        # fallbacks to the command name incase command description is not defined
+            if not slash_command.default_member_permissions:
+                em.add_field(name="/" + slash_command.name, 
+                            value=slash_command.description if slash_command.description else slash_command.name, 
+                            inline=False) 
+                            # fallbacks to the command name incase command description is not defined
+            elif slash_command.default_member_permissions < ctx.author.guild_permissions: # check if required perms are a subset of users perms, to see if they can use command
+                em.add_field(name="/" + slash_command.name, 
+                            value=slash_command.description if slash_command.description else slash_command.name, 
+                            inline=False) 
+                            # fallbacks to the command name incase command description is not defined
 
         await ctx.send_response(embed=em)
 
@@ -288,7 +295,7 @@ class Danisen(commands.Cog):
             "Welcome to the Danisen!"
         )
 
-    @discord.commands.slash_command(description="unregister to the Danisen database!")
+    @discord.commands.slash_command(description="Unregister a character from the Danisen database. Note this will reset dan and points.")
     async def unregister(self, ctx : discord.ApplicationContext, 
                     char1 : discord.Option(str, name="character", autocomplete=character_autocomplete)):
 
@@ -380,29 +387,40 @@ class Danisen(commands.Cog):
             await ctx.respond(f"""{member.name} is not registered as {char} so you have no rank...""")
 
     #leaves the matchmaking queue
-    @discord.commands.slash_command(description="leave the danisen queue")
-    async def leave_queue(self, ctx : discord.ApplicationContext):
+    @discord.commands.slash_command(name="leavequeue", description="leave the danisen queue")
+    async def leave_queue(self, ctx : discord.ApplicationContext,
+                                char : discord.Option(str, name="character", required=False, autocomplete=character_autocomplete)):
         discord_id = ctx.author.id
         self.logger.info(f"{ctx.author.name} requested to leave the queue")
-        daniel = None 
+        daniels = [] 
 
         for member in self.matchmaking_queue:
-            if member and (member['discord_id'] == discord_id):
-                self.matchmaking_queue.remove(member)
-                daniel = member
-                break
+            self.logger.debug(f"Checking if player {member['player_name']} on character {member['character']} should leave queue.")
+            if member and (member['discord_id'] == discord_id) and (char is None or (char is not None and member['character'] == char)):
+                self.logger.debug(f"Player {member['player_name']} on character {member['character']} should leave queue.")
+                daniels.append(member)
 
-        if daniel:
-            if daniel in self.dans_in_queue[daniel['dan']]:
-                self.dans_in_queue[daniel['dan']].remove(daniel)
+        if char is not None and daniels != []:
+            for daniel in daniels:
+                if daniel in self.dans_in_queue[daniel['dan']]:
+                    self.dans_in_queue[daniel['dan']].remove(daniel)
+                    self.matchmaking_queue.remove(daniel)
 
-            self.in_queue[daniel['discord_id']][0] = False
-            await ctx.respond("You have been removed from the queue")
+                self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
+            await ctx.respond(f"You have been removed from the queue as {char}.")
+        elif daniels != []:
+            for daniel in daniels:
+                if daniel in self.dans_in_queue[daniel['dan']]:
+                    self.dans_in_queue[daniel['dan']].remove(daniel)
+                    self.matchmaking_queue.remove(member)
+
+                self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
+            await ctx.respond("You have been removed from the queue on all characters.")
         else:
-            await ctx.respond("You are not in queue")
+            await ctx.respond("You are not in queue.")
 
     #joins the matchmaking queue
-    @discord.commands.slash_command(description="queue up for danisen games")
+    @discord.commands.slash_command(name="joinqueue", description="queue up for danisen games")
     async def join_queue(self, ctx : discord.ApplicationContext,
                     char: discord.Option(str, autocomplete=character_autocomplete),
                     rejoin_queue: discord.Option(bool)):
@@ -429,7 +447,8 @@ class Danisen(commands.Cog):
         daniel['requeue'] = rejoin_queue
 
         #Check if in Queue already
-        if discord_id in self.in_queue and self.in_queue[discord_id][0] and self.in_queue[discord_id][1] == daniel["character"]:
+        self.logger.debug(f"checking that {str(discord_id)+"@"+char} is in {self.in_queue}: {str(discord_id)+"@"+char in self.in_queue} and {(str(discord_id)+"@"+char in self.in_queue) and self.in_queue[str(discord_id)+"@"+char][0]}")
+        if str(discord_id)+"@"+char in self.in_queue and self.in_queue[str(discord_id)+"@"+char][0]:
             await ctx.respond(f"You are already in the queue as that character")
             return
 
@@ -438,17 +457,18 @@ class Danisen(commands.Cog):
             await ctx.respond(f"You are in an active match and cannot queue up")
             return
 
-        self.in_queue.setdefault(discord_id, [True, daniel["character"], deque(maxlen=self.recent_opponents_limit)])
-        self.in_match.setdefault(discord_id, False)
+        if self.in_queue.setdefault(str(discord_id)+"@"+char, [True, deque(maxlen=self.recent_opponents_limit)]):
+            self.in_queue[str(discord_id)+"@"+char][0] = True
+        self.in_match.setdefault(str(discord_id)+"@"+char, False)
 
         self.dans_in_queue[daniel['dan']].append(daniel)
         self.matchmaking_queue.append(daniel)
         await ctx.respond(f"You've been added to the matchmaking queue with {char}")
 
         #matchmake
-        if (self.cur_active_matches < self.max_active_matches and
-            len(self.matchmaking_queue) >= 2):
-            await self.matchmake(ctx.interaction)
+        # if (self.cur_active_matches < self.max_active_matches and  # Taking out automatic matchmaking
+        #     len(self.matchmaking_queue) >= 2):
+        #     await self.matchmake(ctx.interaction)
 
     def rejoin_queue(self, player):
         if self.queue_status == False:
@@ -463,23 +483,33 @@ class Danisen(commands.Cog):
         player['requeue'] = True
 
         # Ensure the player is initialized in self.in_queue
-        if player['discord_id'] not in self.in_queue:
-            self.in_queue[player['discord_id']] = [False, player['character'], deque(maxlen=self.recent_opponents_limit)]
+        if str(player['discord_id'])+"@"+player['character'] not in self.in_queue:
+            self.in_queue[str(player['discord_id'])+"@"+player['character']] = [False, deque(maxlen=self.recent_opponents_limit)]
 
-        self.in_queue[player['discord_id']][0] = True
+        self.in_queue[str(player['discord_id'])+"@"+player['character']][0] = True
         self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
         self.matchmaking_queue.append(player)
 
-    @discord.commands.slash_command(description="view players in the queue")
+    @discord.commands.slash_command(name="viewqueue", description="view players in the queue")
     async def view_queue(self, ctx : discord.ApplicationContext):
-        await ctx.respond(f"Current full MMQ {self.matchmaking_queue}\nCurrent full DanQ {self.dans_in_queue}")
+        em = discord.Embed(
+            title="Current Danisen Queue",
+            color=discord.Color.blurple())
 
-    @discord.commands.slash_command(description="Start matchmaking.")
+        for player in self.matchmaking_queue:
+            em.add_field(name=f"{player['player_name']} ({player['character']})", 
+                        value=f"Dan {player['dan']}, {player['points']} points", 
+                        inline=False) 
+        
+        await ctx.send_response(embed=em)
+
+    @discord.commands.slash_command(name="startmatchmaking", description="Start matchmaking.")
     async def start_matchmaking(self, ctx: discord.ApplicationContext):
         await self.matchmake(ctx.interaction)
         await ctx.respond("Finished matchmaking")
 
     async def matchmake(self, ctx: discord.Interaction):
+        match_attempts = 0
         while (self.cur_active_matches < self.max_active_matches and
                len(self.matchmaking_queue) >= 2):
             self.logger.debug(f"Starting matchmaking loop. Current matchmaking_queue: {list(self.matchmaking_queue)}")
@@ -492,7 +522,7 @@ class Danisen(commands.Cog):
                 self.logger.warning("Dequeued daniel1 is None. Skipping iteration.")
                 continue
 
-            self.in_queue[daniel1['discord_id']][0] = False
+            self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][0] = False
 
             same_daniel = self.dans_in_queue[daniel1['dan']].popleft()  # Pop from the left of the deque
             self.logger.debug(f"Dequeued same_daniel from dans_in_queue[{daniel1['dan']}]: {same_daniel}")
@@ -521,7 +551,8 @@ class Danisen(commands.Cog):
                     daniel2 = self.dans_in_queue[dan].popleft()
                     self.logger.debug(f"Dequeued daniel2 from dans_in_queue[{dan}]: {daniel2}")
 
-                    if daniel2['discord_id'] in self.in_queue[daniel1['discord_id']][2]:
+                    self.logger.debug(f"first {str(daniel2['discord_id'])+"@"+daniel2['character']}, second {self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]}")
+                    if str(daniel2['discord_id'])+"@"+daniel2['character'] in self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]:
                         self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents.")
                         old_daniels.append(daniel2)
                         continue
@@ -536,14 +567,19 @@ class Danisen(commands.Cog):
                         old_daniels.append(daniel2)
                         continue
 
+                    if daniel1['discord_id'] in self.in_match and self.in_match[daniel1['discord_id']]:
+                        self.logger.debug(f"Skipping daniel1 chosen from queue {daniel1} as they are currently in a match as a different character.")
+                        old_daniels.append(daniel2)
+                        continue
 
-                    self.in_queue[daniel2['discord_id']] = [False, daniel2['character'], deque([daniel1['discord_id']], maxlen=self.recent_opponents_limit)] # why does this do this instead of just mutate
-                    self.in_queue[daniel1['discord_id']][2].append(daniel2['discord_id'])
+
+                    self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([str(daniel1['discord_id'])+"@"+daniel1['character']], maxlen=self.recent_opponents_limit)] # why does this do this instead of just mutate
+                    self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(str(daniel2['discord_id'])+"@"+daniel2['character'])
 
                     # Clean up the main queue for players that have already been matched
                     for idx in reversed(range(len(self.matchmaking_queue))):
                         player = self.matchmaking_queue[idx]
-                        if player and (player['discord_id'] == daniel2['discord_id']):
+                        if player and (player['discord_id'] == daniel2['discord_id']) and (player['character'] == daniel2['character']):
                             self.logger.debug(f"Removing matched player {player} from matchmaking_queue.")
                             self.matchmaking_queue[idx] = None
 
@@ -560,26 +596,30 @@ class Danisen(commands.Cog):
             for old_daniel in old_daniels:
                 self.logger.debug(f"Re-adding skipped daniel {old_daniel} back to dans_in_queue[{old_daniel['dan']}].")
                 self.dans_in_queue[old_daniel['dan']].appendleft(old_daniel)
-                self.in_queue[old_daniel['discord_id']][0] = True
+                self.in_queue[str(old_daniel['discord_id'])+"@"+old_daniel['character']][0] = True
 
             if not matchmade:
                 self.logger.debug(f"No match found for daniel1 {daniel1}. Re-adding to queues.")
-                self.matchmaking_queue.appendleft(daniel1)  # Append back to the deque
-                self.dans_in_queue[daniel1['dan']].appendleft(daniel1)  # Append back to the deque
-                self.in_queue[daniel1['discord_id']][0] = True
-                break
+                self.matchmaking_queue.append(daniel1)  # Append back to the deque
+                self.dans_in_queue[daniel1['dan']].append(daniel1)  # Append back to the deque
+                self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][0] = True
+                match_attempts += 1  # Since we can have multiple players on different chars, we have to check at least half(?) the queue
+                if match_attempts > (len(self.in_queue) // 2):
+                    self.logger.debug(f"No possible matches for any player in queue.")
+                    # shuffle(self.matchmaking_queue)
+                    break
 
     async def create_match_interaction(self, ctx: discord.Interaction, daniel1, daniel2):
         self.cur_active_matches += 1
-        view = MatchView(self, daniel1, daniel2)
+        view = MatchView(self, daniel1, daniel2) # I have no need for this
         id1 = f"<@{daniel1['discord_id']}>"
         id2 = f"<@{daniel2['discord_id']}>"
 
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                f"{id1} {daniel1['character']} dan {daniel1['dan']} points {daniel1['points']} vs {id2} {daniel2['character']} dan {daniel2['dan']} points {daniel2['points']} "
-                "\n Note only players in the match can report it! (and admins)",
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {daniel1['points']} points)\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {daniel2['points']} points)"
+                "\n\nAll sets are FT2, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
             )
             await webhook_msg.pin()
@@ -630,9 +670,9 @@ class Danisen(commands.Cog):
             loser = player1_name
 
         await ctx.respond(
-            f"Match has been reported as {winner}'s victory over {loser}\n"
-            f"{player1_name}'s {char1} rank is now {winner_rank[0]} dan {winner_rank[1]} points\n"
-            f"{player2_name}'s {char2} rank is now {loser_rank[0]} dan {loser_rank[1]} points"
+            f"### The match has been reported as {winner}'s victory over {loser}!\n"
+            f"{player1_name}'s {char1} is now Dan {winner_rank[0]}, {winner_rank[1]} points.\n"
+            f"{player2_name}'s {char2} is now Dan {loser_rank[0]}, {loser_rank[1]} points."
         )
 
     #report match score for the queue
@@ -640,15 +680,23 @@ class Danisen(commands.Cog):
         if (winner == "player1") :
             winner_rank, loser_rank = await self.score_update(interaction, player1,player2)
             winner = player1['player_name']
+            winner_char = player1['character']
             loser = player2['player_name']
+            loser_char = player2['character']
         else:
-            loser_rank, winner_rank = await self.score_update(interaction, player2,player1)
+            winner_rank, loser_rank = await self.score_update(interaction, player2,player1)
             winner = player2['player_name']
+            winner_char = player2['character']
             loser = player1['player_name']
+            loser_char = player1['character']
 
         channel = self.bot.get_channel(self.REPORTED_MATCHES_CHANNEL_ID)
         if channel:
-            await channel.send(f"Match has been reported as {winner}'s victory over {loser}\n{player1['player_name']}'s {player1['character']} rank is now {winner_rank[0]} dan {winner_rank[1]} points\n{player2['player_name']}'s {player2['character']} rank is now {loser_rank[0]} dan {loser_rank[1]} points")
+            await channel.send(
+                f"### The match has been reported as {winner}'s victory over {loser}!\n"
+                f"{winner}'s {winner_char} is now Dan {winner_rank[0]}, {winner_rank[1]} points.\n"
+                f"{loser}'s {loser_char} is now Dan {loser_rank[0]}, {loser_rank[1]} points."
+                )
         else:
             self.logger.warning("No Report Matches Channel")
 
@@ -682,7 +730,7 @@ class Danisen(commands.Cog):
         return page_list
 
     # Refactor danisen_stats to use the helper function
-    @discord.commands.slash_command(description="See various statistics about the danisen")
+    @discord.commands.slash_command(name="danisenstats", description="See various statistics about the danisen")
     async def danisen_stats(self, ctx: discord.ApplicationContext):
         char_count = self.database_cur.execute(
             "SELECT character AS name, COUNT(*) AS value FROM players GROUP BY character ORDER BY character"
@@ -711,17 +759,17 @@ class Danisen(commands.Cog):
         paginator = pages.Paginator(pages=leaderboard_pages)
         await paginator.respond(ctx.interaction, ephemeral=False)
 
-    @discord.commands.slash_command(description="Update max matches for the queue system (Admin Cmd)")
+    @discord.commands.slash_command(name="updatemaxmatches", description="[Admin Command] Update max matches for the queue system")
     @discord.commands.default_permissions(manage_messages=True)
     async def update_max_matches(self, ctx : discord.ApplicationContext,
                                  max : discord.Option(int, min_value=1)):
         self.max_active_matches = max
         await ctx.respond(f"Max matches updated to {max}")
-        if (self.cur_active_matches < self.max_active_matches and
-        len(self.matchmaking_queue) >= 2):
-            await self.matchmake(ctx.interaction)
+        # if (self.cur_active_matches < self.max_active_matches and  # Taking out automatic matchmaking
+        # len(self.matchmaking_queue) >= 2):
+        #     await self.matchmake(ctx.interaction)
 
-    @discord.commands.slash_command(description="View current bot configuration (admin)")
+    @discord.commands.slash_command(name="viewconfig", description="[Admin Command] View current bot configuration.")
     @discord.commands.default_permissions(manage_guild=True)
     async def view_config(self, ctx: discord.ApplicationContext):
         """Displays the current configuration loaded from the config file."""
@@ -748,7 +796,7 @@ class Danisen(commands.Cog):
 
         await ctx.respond(embed=em, ephemeral=True)
 
-    @discord.commands.slash_command(description="Set a configuration key (admin)")
+    @discord.commands.slash_command(name="setconfig", description="[Admin Command] Set a configuration key.")
     @discord.commands.default_permissions(manage_guild=True)
     async def set_config(self, ctx: discord.ApplicationContext,
                          key: discord.Option(str, choices=[
@@ -865,9 +913,9 @@ class Danisen(commands.Cog):
         )
         return res.fetchall()
 
-    @discord.commands.slash_command(description="View your profile or another player's profile")
+    @discord.commands.slash_command(description="View your or another player's profile")
     async def profile(self, ctx: discord.ApplicationContext, 
-                      discord_name: discord.Option(str, autocomplete=player_autocomplete, default=None)):
+                      discord_name: discord.Option(str, name="discordname", autocomplete=player_autocomplete, required=False, default=None)):
         """Lists all registered characters for a player along with their ranks and points."""
         # Determine the target player
         if discord_name:
@@ -906,3 +954,19 @@ class Danisen(commands.Cog):
             )
 
         await ctx.respond(embed=em)
+
+    # Command Aliases for common commands
+    @discord.commands.slash_command(name="jq", description="short for /joinqueue")
+    async def join_queue_alias(self, ctx : discord.ApplicationContext,
+                    char: discord.Option(str, autocomplete=character_autocomplete),
+                    rejoin_queue: discord.Option(bool)):
+        await self.join_queue(ctx, char, rejoin_queue)
+        
+    @discord.commands.slash_command(name="lq", description="short for /leavequeue")
+    async def leave_queue_alias(self, ctx : discord.ApplicationContext,
+                                char : discord.Option(str, name="character", required=False, autocomplete=character_autocomplete)):
+        await self.leave_queue(ctx, char)
+
+    @discord.commands.slash_command(name="vq", description="short for /viewqueue")
+    async def view_queue_alias(self, ctx : discord.ApplicationContext):
+        await self.view_queue(ctx)
