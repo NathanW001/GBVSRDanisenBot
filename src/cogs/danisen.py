@@ -9,7 +9,7 @@ from random import shuffle
 
 class Danisen(commands.Cog):
     # Predefined characters and players
-    characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "AvatarBelial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
+    characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "Avatar Belial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
     players = []
     dan_colours = [
         discord.Colour.from_rgb(255, 255, 255), discord.Colour.from_rgb(255, 255, 0), discord.Colour.from_rgb(255, 153, 0),
@@ -85,15 +85,15 @@ class Danisen(commands.Cog):
 
     def dead_role(self, ctx, player):
         # Check if a player's dan role should be removed
-        # With multiple characters, it will keep only the highest dan rank among all of them
         role = None
         self.logger.info(f'Checking if dan should be removed as well')
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan>={player['dan']}")
+        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan={player['dan']}")
         remaining_daniel = res.fetchone()
         if not remaining_daniel:
             self.logger.info(f"Dan role {player['dan']} will be removed")
             role = discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}")
         return role
+
 
     async def score_update(self, ctx, winner, loser):
         # Update scores for a match
@@ -160,7 +160,7 @@ class Danisen(commands.Cog):
             bot_member = ctx.guild.get_member(self.bot.user.id)
             if role and self.can_manage_role(bot_member, role):
                 await member.add_roles(role)
-            role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0] - 1}") # this could cause issues, but should be fine as long as you can't rank up twice in one game
+            role = self.dead_role(ctx, winner) # this could cause issues, but should be fine as long as you can't rank up twice in one game (which cant happen)
             if role and self.can_manage_role(bot_member, role):
                 await member.remove_roles(role)
 
@@ -197,13 +197,14 @@ class Danisen(commands.Cog):
             return
         self.database_cur.execute(f"UPDATE players SET dan = {dan}, points = {points} WHERE player_name='{player_name}' AND character='{char}'")
         self.database_con.commit()
+        self.refresh_user_roles(ctx, player_name, char, dan)
         await ctx.respond(f"{player_name}'s {char} rank updated to be dan {dan} points {points}")
 
     @discord.commands.slash_command(description="Displays a help message and a list of commands.")
     async def help(self, ctx : discord.ApplicationContext):
         em = discord.Embed(
             title="GBVSR Danisen Bot Command List",
-            description="Below is a list of all commands for the GBVSR Danisen Bot. For more information about Danisen, visit <#1432872071666602127>.",
+            description="Below is a list of all commands for the GBVSR Danisen Bot. For more information about Danisen, visit <#1433543613404414112>.",
             color=discord.Color.blurple())
         # if self.bot.user.avatar.url: # I dont really like the way the thumbnail looks lol
         #     em.set_thumbnail(
@@ -274,9 +275,11 @@ class Danisen(commands.Cog):
             role_list.append(char_role)
         self.logger.info(f"Adding to db {player_name} {char1}")
 
-        dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
-        if dan_role:
-            role_list.append(dan_role)
+        highest_dan = get_players_highest_dan(player_name)
+        if not highest_dan:
+            dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
+            if dan_role:
+                role_list.append(dan_role)
 
         participant_role = discord.utils.get(ctx.guild.roles, name="Danisen Participant")
         if participant_role:
@@ -954,6 +957,28 @@ class Danisen(commands.Cog):
             )
 
         await ctx.respond(embed=em)
+
+    # Helper function for /setrank
+    async def refresh_user_roles(self, ctx: discord.ApplicationContext,
+                                    player_name: str,
+                                    character: str,
+                                    dan: int):
+        player_entry = self.get_player(player_name, character)          
+        role = self.dead_role(self.get_player(player_name, character))
+        if role:
+                await member.remove_roles(role)
+
+        discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}")
+
+    # Helper function
+    # Returns the highest Dan rank on any character registered by this player. If the player has no characters registered, return None
+    async def get_players_highest_dan(self, ctx: discord.ApplicationContext,
+                                            player_name: str):
+        res = self.database_cur.execute(f"SELECT MAX(dan) as max_dan FROM players WHERE player_name={player_name}").fetchone()
+        if res is not None:
+            return res['max_dan']
+        else:
+            return res
 
     # Command Aliases for common commands
     @discord.commands.slash_command(name="jq", description="short for /joinqueue")
