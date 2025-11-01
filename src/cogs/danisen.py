@@ -12,11 +12,10 @@ class Danisen(commands.Cog):
     characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "Avatar Belial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
     players = []
     dan_colours = [
-        discord.Colour.from_rgb(255, 255, 255), discord.Colour.from_rgb(255, 255, 0), discord.Colour.from_rgb(255, 153, 0),
-        discord.Colour.from_rgb(39, 78, 19), discord.Colour.from_rgb(97, 0, 162), discord.Colour.from_rgb(0, 0, 177), discord.Colour.from_rgb(120, 63, 4),
-        # SPECIAL RANKS
-        discord.Colour.from_rgb(0, 0, 255), discord.Colour.from_rgb(120, 63, 4), discord.Colour.from_rgb(255, 0, 0), discord.Colour.from_rgb(152, 0, 0), discord.Colour.from_rgb(0, 0, 0)
-    ]
+        discord.Colour.from_rgb(237, 237, 237), discord.Colour.from_rgb(176, 105, 48), discord.Colour.from_rgb(150, 150, 150),
+        discord.Colour.from_rgb(227, 197, 45), discord.Colour.from_rgb(23, 209, 66), discord.Colour.from_rgb(105, 215, 240), discord.Colour.from_rgb(178, 75, 219),
+        discord.Colour.from_rgb(252, 166, 220), discord.Colour.from_rgb(17, 20, 172), discord.Colour.from_rgb(240, 64, 48),
+    ] 
 
     def __init__(self, bot, database, config_path):
         # Initialize the cog
@@ -61,8 +60,8 @@ class Danisen(commands.Cog):
         self.REPORTED_MATCHES_CHANNEL_ID = int(config.get('REPORTED_MATCHES_CHANNEL_ID', 0))
         self.total_dans = config.get('total_dans', MAX_DAN_RANK)
         self.minimum_derank = config.get('minimum_derank', DEFAULT_DAN)
-        self.maximum_rank_difference = config.get('maximum_rank_difference', 2)
-        self.rank_gap_for_more_points = config.get('rank_gap_for_more_points', 1)
+        self.rank_gap_for_more_points_1 = config.get('rank_gap_for_more_points_1', 2)
+        self.rank_gap_for_more_points_2 = config.get("rank_gap_for_more_points_2", 4)
         self.point_rollover = config.get('point_rollover', True)
         self.queue_status = config.get('queue_status', True)
         self.recent_opponents_limit = config.get('recent_opponents_limit', 2)
@@ -71,7 +70,7 @@ class Danisen(commands.Cog):
 
     @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
     @discord.commands.default_permissions(manage_roles=True)
-    async def set_queue(self, ctx: discord.ApplicationContext, queue_status: discord.Option(bool)):
+    async def set_queue(self, ctx: discord.ApplicationContext, queue_status: discord.Option(name="enablequeue", bool)):
         # Enable or disable the matchmaking queue
         self.queue_status = queue_status
         if not queue_status:
@@ -103,22 +102,28 @@ class Danisen(commands.Cog):
         rankup = False
 
         # Determine rankup points based on rank type
-        rankup_points = RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+        rankup_points = RANKUP_POINTS_NORMAL # RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
 
-        # Winning logic
-        if winner_rank[0] > loser_rank[0] + self.maximum_rank_difference:
-            return winner_rank, loser_rank
-
-        if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points:
-            winner_rank[1] += 2  # Lower-ranked player gains 2 points
-        else:
-            winner_rank[1] += 1  # Higher-ranked player gains 1 point
-
-        # Losing logic
-        if loser_rank[0] > self.minimum_derank:
+        # Winning and Losing logic
+        if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_2: # lower ranked player wins with 4 rank gap
+            winner_rank[1] += 1
             loser_rank[1] -= 1
-        elif loser_rank[1] > 0:
+        elif loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_1: # lower ranked player wins with 2 rank gap
+            winner_rank[1] += 1
             loser_rank[1] -= 1
+        elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_2: # higher ranked player wins with 4 rank gap
+            winner_rank[1] += 0.1
+            loser_rank[1] -= 0.1
+        elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_1: # higher ranked player wins with 2 rank gap
+            winner_rank[1] += 0.5
+            loser_rank[1] -= 0.5
+        elif:
+            winner_rank[1] += 1 
+            loser_rank[1] -= 1
+
+        if loser_rank[0] == self.minimum_derank and loser_rank[1] < 0: # making sure loser can't go lower than minimum rank
+            loser_rank[1] = 0
+        
 
         # Rankup logic with special rules
         if winner_rank[1] >= rankup_points:
@@ -155,20 +160,28 @@ class Danisen(commands.Cog):
 
         # Update roles on rankup/down
         if rankup:
-            role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0]}")
-            member = ctx.guild.get_member(winner['discord_id'])
-            bot_member = ctx.guild.get_member(self.bot.user.id)
-            if role and self.can_manage_role(bot_member, role):
-                await member.add_roles(role)
-            role = self.dead_role(ctx, winner) # this could cause issues, but should be fine as long as you can't rank up twice in one game (which cant happen)
-            if role and self.can_manage_role(bot_member, role):
-                await member.remove_roles(role)
+            dan = self.get_players_highest_dan(ctx, winner)
+            if dan and dan == winner_rank[0]: # it's their highest ranked character that just ranked up, since the table is updated first we check for equality
+                role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0]}")
+                member = ctx.guild.get_member(winner['discord_id'])
+                bot_member = ctx.guild.get_member(self.bot.user.id)
+                if role and self.can_manage_role(bot_member, role):
+                    await member.add_roles(role)
+                role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0] - 1}") # this could cause issues, but should be fine as long as you can't rank up twice in one game (which cant happen)
+                if role and self.can_manage_role(bot_member, role):
+                    await member.remove_roles(role)
 
         if rankdown:
-            member = ctx.guild.get_member(loser['discord_id'])
-            role = self.dead_role(ctx, loser)
-            if role:
-                await member.remove_roles(role)
+            dan = self.get_players_highest_dan(ctx, loser)
+            if dan and dan == loser_rank[0]: # same as above, hopefully
+                role = discord.utils.get(ctx.guild.roles, name=f"Dan {lower_rank[0]}")
+                member = ctx.guild.get_member(loser['discord_id'])
+                bot_member = ctx.guild.get_member(self.bot.user.id)
+                if role and self.can_manage_role(bot_member, role):
+                    await member.add_roles(role)
+                role = discord.utils.get(ctx.guild.roles, name=f"Dan {loser_rank[0] + 1}") # this could cause issues, but should be fine as long as you can't rank up twice in one game (which cant happen)
+                if role and self.can_manage_role(bot_member, role):
+                    await member.remove_roles(role)
 
         return winner_rank, loser_rank
 
@@ -189,15 +202,36 @@ class Danisen(commands.Cog):
     @discord.commands.default_permissions(manage_roles=True)
     async def set_rank(self, ctx : discord.ApplicationContext,
                         player_name :  discord.Option(str, autocomplete=player_autocomplete),
-                        char : discord.Option(str, autocomplete=character_autocomplete),
+                        char : discord.Option(str, name="character", autocomplete=character_autocomplete),
                         dan :  discord.Option(int),
-                        points : discord.Option(int)):
+                        points : discord.Option(float)):
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
             return
+
+        # sync role stuff
+        role_removed = False
+        res = self.databased_cur.execute(f"SELECT dan FROM players WHERE player_name='{player_name}' AND character='{char}'").fetchone()
+        if res: 
+            if res['dan'] == self.get_players_highest_dan(ctx, player_name): # if this is the player's highest ranked character being updated, we need to remove the corresponding dan role
+                role = discord.utils.get(ctx.guild.roles, name=f"Dan {res['dan']}")
+                member = ctx.guild.get_member(winner['discord_id'])
+                bot_member = ctx.guild.get_member(self.bot.user.id)
+                if role and self.can_manage_role(bot_member, role):
+                    await member.remove_roles(role)
+        else:
+            await ctx.respond(f"Database entry for player {player} on character {char} not found.")
+        
         self.database_cur.execute(f"UPDATE players SET dan = {dan}, points = {points} WHERE player_name='{player_name}' AND character='{char}'")
         self.database_con.commit()
-        self.refresh_user_roles(ctx, player_name, char, dan)
+
+        if role_removed and not self.get_players_highest_dan(ctx, player_name):
+            role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx, player_name)}")
+            member = ctx.guild.get_member(winner['discord_id'])
+            bot_member = ctx.guild.get_member(self.bot.user.id)
+            if role and self.can_manage_role(bot_member, role):
+                await member.add_roles(role)
+
         await ctx.respond(f"{player_name}'s {char} rank updated to be dan {dan} points {points}")
 
     @discord.commands.slash_command(description="Displays a help message and a list of commands.")
@@ -362,8 +396,8 @@ class Danisen(commands.Cog):
     #rank command to get discord_name's player rank, (can also ignore 2nd param for own rank)
     @discord.commands.slash_command(description="Get your character rank/Put in a players name to get their character rank!")
     async def rank(self, ctx : discord.ApplicationContext,
-                char : discord.Option(str, autocomplete=character_autocomplete),
-                discord_name :  discord.Option(str, autocomplete=player_autocomplete)):
+                char : discord.Option(str, name="character", autocomplete=character_autocomplete),
+                discord_name :  discord.Option(str, required=False, autocomplete=player_autocomplete)):
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
             return
@@ -425,10 +459,10 @@ class Danisen(commands.Cog):
     #joins the matchmaking queue
     @discord.commands.slash_command(name="joinqueue", description="queue up for danisen games")
     async def join_queue(self, ctx : discord.ApplicationContext,
-                    char: discord.Option(str, autocomplete=character_autocomplete),
-                    rejoin_queue: discord.Option(bool)):
+                    char: discord.Option(str, autocomplete=character_autocomplete)):
         await ctx.defer()
         discord_id = ctx.author.id
+        rejoin_queue = True
 
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
@@ -805,7 +839,7 @@ class Danisen(commands.Cog):
                          key: discord.Option(str, choices=[
                              "ACTIVE_MATCHES_CHANNEL_ID", "REPORTED_MATCHES_CHANNEL_ID",
                              "total_dans", "minimum_derank", "maximum_rank_difference",
-                             "rank_gap_for_more_points", "point_rollover", "queue_status",
+                             "rank_gap_for_more_points_1", "rank_gap_for_more_points_2" "point_rollover", "queue_status",
                              "recent_opponents_limit", "max_active_matches", "special_rank_up_rules"
                          ]),
                          value: discord.Option(str)):
@@ -958,24 +992,12 @@ class Danisen(commands.Cog):
 
         await ctx.respond(embed=em)
 
-    # Helper function for /setrank
-    async def refresh_user_roles(self, ctx: discord.ApplicationContext,
-                                    player_name: str,
-                                    character: str,
-                                    dan: int):
-        player_entry = self.get_player(player_name, character)          
-        role = self.dead_role(self.get_player(player_name, character))
-        if role:
-                await member.remove_roles(role)
-
-        discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}")
-
     # Helper function
     # Returns the highest Dan rank on any character registered by this player. If the player has no characters registered, return None
     async def get_players_highest_dan(self, ctx: discord.ApplicationContext,
                                             player_name: str):
         res = self.database_cur.execute(f"SELECT MAX(dan) as max_dan FROM players WHERE player_name={player_name}").fetchone()
-        if res is not None:
+        if not res:
             return res['max_dan']
         else:
             return res
