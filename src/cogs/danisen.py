@@ -548,8 +548,10 @@ class Danisen(commands.Cog):
             title="Current Danisen Queue",
             color=discord.Color.blurple())
 
+        self.logger.debug(f"current queue is {self.matchmaking_queue}")
         for player in self.matchmaking_queue:
-            em.add_field(name=f"{player['player_name']} ({player['character']})", 
+            if player:
+                em.add_field(name=f"{player['player_name']} ({player['character']})", 
                         value=f"Dan {player['dan']}, {player['points']} points", 
                         inline=False) 
         
@@ -562,6 +564,11 @@ class Danisen(commands.Cog):
 
     async def matchmake(self, ctx: discord.Interaction):
         match_attempts = 0
+        #  This is to deal with the case where there is one None in the queue
+        if len(self.matchmaking_queue) == 1 and self.matchmaking_queue[0] is None:
+            self.matchmaking_queue.popleft()
+            return
+            
         while (self.cur_active_matches < self.max_active_matches and
                len(self.matchmaking_queue) >= 2):
             self.logger.debug(f"Starting matchmaking loop. Current matchmaking_queue: {list(self.matchmaking_queue)}")
