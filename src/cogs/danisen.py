@@ -70,7 +70,7 @@ class Danisen(commands.Cog):
 
     @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
     @discord.commands.default_permissions(manage_roles=True)
-    async def set_queue(self, ctx: discord.ApplicationContext, queue_status: discord.Option(name="enablequeue", bool)):
+    async def set_queue(self, ctx: discord.ApplicationContext, queue_status: discord.Option(bool, name="enablequeue")):
         # Enable or disable the matchmaking queue
         self.queue_status = queue_status
         if not queue_status:
@@ -117,7 +117,7 @@ class Danisen(commands.Cog):
         elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_1: # higher ranked player wins with 2 rank gap
             winner_rank[1] += 0.5
             loser_rank[1] -= 0.5
-        elif:
+        else:
             winner_rank[1] += 1 
             loser_rank[1] -= 1
 
@@ -211,23 +211,24 @@ class Danisen(commands.Cog):
 
         # sync role stuff
         role_removed = False
-        res = self.databased_cur.execute(f"SELECT dan FROM players WHERE player_name='{player_name}' AND character='{char}'").fetchone()
+        res = self.database_cur.execute(f"SELECT dan, discord_id FROM players WHERE player_name='{player_name}' AND character='{char}'").fetchone()
         if res: 
-            if res['dan'] == self.get_players_highest_dan(ctx, player_name): # if this is the player's highest ranked character being updated, we need to remove the corresponding dan role
-                role = discord.utils.get(ctx.guild.roles, name=f"Dan {res['dan']}")
-                member = ctx.guild.get_member(winner['discord_id'])
+            if res['dan'] == self.get_players_highest_dan(ctx, player_name) or dan > self.get_players_highest_dan(ctx, player_name): # if this is the player's highest ranked character being updated, we need to remove the corresponding dan role
+                role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx, player_name)}")
+                member = ctx.guild.get_member(res['discord_id'])
                 bot_member = ctx.guild.get_member(self.bot.user.id)
                 if role and self.can_manage_role(bot_member, role):
                     await member.remove_roles(role)
+                    role_removed = True
         else:
             await ctx.respond(f"Database entry for player {player} on character {char} not found.")
         
         self.database_cur.execute(f"UPDATE players SET dan = {dan}, points = {points} WHERE player_name='{player_name}' AND character='{char}'")
         self.database_con.commit()
 
-        if role_removed and not self.get_players_highest_dan(ctx, player_name):
+        if role_removed and self.get_players_highest_dan(ctx, player_name) is not None:
             role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx, player_name)}")
-            member = ctx.guild.get_member(winner['discord_id'])
+            member = ctx.guild.get_member(res['discord_id'])
             bot_member = ctx.guild.get_member(self.bot.user.id)
             if role and self.can_manage_role(bot_member, role):
                 await member.add_roles(role)
@@ -309,8 +310,9 @@ class Danisen(commands.Cog):
             role_list.append(char_role)
         self.logger.info(f"Adding to db {player_name} {char1}")
 
-        highest_dan = get_players_highest_dan(player_name)
-        if not highest_dan:
+        highest_dan = self.get_players_highest_dan(ctx, player_name)
+        self.logger.info(f"Registering player's highest dan is {highest_dan}")
+        if not highest_dan or highest_dan == 1:
             dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
             if dan_role:
                 role_list.append(dan_role)
@@ -390,6 +392,14 @@ class Danisen(commands.Cog):
             else:
                 message_text += f"Could not remove roles due to bot's role being too low\n\n"
                 self.logger.warning(f"Could not remove roles due to bot's role being too low")
+        
+        if self.get_players_highest_dan(ctx, ctx.author.name):
+            role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx, ctx.author.name)}")
+            member = ctx.author
+            bot_member = ctx.guild.get_member(self.bot.user.id)
+            if role and self.can_manage_role(bot_member, role):
+                await member.add_roles(role)
+
         message_text += f"You have now unregistered {char1}"
         await ctx.respond(message_text)
 
@@ -994,10 +1004,10 @@ class Danisen(commands.Cog):
 
     # Helper function
     # Returns the highest Dan rank on any character registered by this player. If the player has no characters registered, return None
-    async def get_players_highest_dan(self, ctx: discord.ApplicationContext,
+    def get_players_highest_dan(self, ctx: discord.ApplicationContext,
                                             player_name: str):
-        res = self.database_cur.execute(f"SELECT MAX(dan) as max_dan FROM players WHERE player_name={player_name}").fetchone()
-        if not res:
+        res = self.database_cur.execute(f"SELECT MAX(dan) as max_dan FROM players WHERE player_name='{player_name}'").fetchone()
+        if res:
             return res['max_dan']
         else:
             return res
