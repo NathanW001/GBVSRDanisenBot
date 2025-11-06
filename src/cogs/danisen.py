@@ -40,6 +40,7 @@ class Danisen(commands.Cog):
         self.recent_opponents_limit = 2
         self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
         self.in_match = {}  # Format: discord_id: in_match
+        self.matchmaking_coro = None  # Task created with asyncio to run start_matchmaking after a set delay
 
     def can_manage_role(self, bot_member, role):
         # Check if the bot can manage a specific role
@@ -411,6 +412,9 @@ class Danisen(commands.Cog):
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
             return
+    
+        if not discord_name:
+            discord_name = ctx.author.name
 
         members = ctx.guild.members
         member = None
@@ -429,9 +433,9 @@ class Danisen(commands.Cog):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={id} AND character='{char}'")
         data = res.fetchone()
         if data:
-            await ctx.respond(f"""{data['player_name']}'s rank for {char} is {data['dan']} dan {data['points']} points""")
+            await ctx.respond(f"""{data['player_name']}'s rank for {char} is Dan {data['dan']}, {data['points']} points""")
         else:
-            await ctx.respond(f"""{member.name} is not registered as {char} so you have no rank...""")
+            await ctx.respond(f"""{member.name} is not registered as {char}.""")
 
     #leaves the matchmaking queue
     @discord.commands.slash_command(name="leavequeue", description="leave the danisen queue")
@@ -459,7 +463,7 @@ class Danisen(commands.Cog):
             for daniel in daniels:
                 if daniel in self.dans_in_queue[daniel['dan']]:
                     self.dans_in_queue[daniel['dan']].remove(daniel)
-                    self.matchmaking_queue.remove(member)
+                    self.matchmaking_queue.remove(daniel)
 
                 self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
             await ctx.respond("You have been removed from the queue on all characters.")
@@ -511,6 +515,7 @@ class Danisen(commands.Cog):
         self.dans_in_queue[daniel['dan']].append(daniel)
         self.matchmaking_queue.append(daniel)
         await ctx.respond(f"You've been added to the matchmaking queue with {char}")
+        await self.begin_matchmaking_timer(ctx, 30)
 
         #matchmake
         # if (self.cur_active_matches < self.max_active_matches and  # Taking out automatic matchmaking
@@ -802,7 +807,7 @@ class Danisen(commands.Cog):
             "FROM players ORDER BY dan DESC, points DESC"
         ).fetchall()
 
-        leaderboard_pages = self.create_paginated_embeds("Top Daniels", daniels, MAX_FIELDS_PER_EMBED)
+        leaderboard_pages = self.create_paginated_embeds("Top Danisen Characters", daniels, MAX_FIELDS_PER_EMBED)
         paginator = pages.Paginator(pages=leaderboard_pages)
         await paginator.respond(ctx.interaction, ephemeral=False)
 
@@ -1015,9 +1020,8 @@ class Danisen(commands.Cog):
     # Command Aliases for common commands
     @discord.commands.slash_command(name="jq", description="short for /joinqueue")
     async def join_queue_alias(self, ctx : discord.ApplicationContext,
-                    char: discord.Option(str, autocomplete=character_autocomplete),
-                    rejoin_queue: discord.Option(bool)):
-        await self.join_queue(ctx, char, rejoin_queue)
+                    char: discord.Option(str, autocomplete=character_autocomplete)):
+        await self.join_queue(ctx, char)
         
     @discord.commands.slash_command(name="lq", description="short for /leavequeue")
     async def leave_queue_alias(self, ctx : discord.ApplicationContext,
@@ -1027,3 +1031,23 @@ class Danisen(commands.Cog):
     @discord.commands.slash_command(name="vq", description="short for /viewqueue")
     async def view_queue_alias(self, ctx : discord.ApplicationContext):
         await self.view_queue(ctx)
+
+    # This function is used to create an asynchronous task for the matchmaking timer if there is not one running
+    async def begin_matchmaking_timer(self, ctx: discord.ApplicationContext, delay: int):
+        self.logger.debug(f"Attempting to start matchmaking timer")
+        if self.matchmaking_coro is None or self.matchmaking_coro.done():
+            self.matchmaking_coro = asyncio.create_task(self.matchmaking_timer(ctx, delay))
+            self.logger.debug(f"Matchmaking timer started with {delay} seconds")
+
+    async def matchmaking_timer(self, ctx: discord.ApplicationContext, delay: int):
+        await asyncio.sleep(delay)
+        self.logger.debug(f"Timer ended, attempting matchmaking")
+        await self.matchmake(ctx.interaction)
+
+        while len(self.matchmaking_queue) > 0:
+            self.logger.debug(f"players still detected in queue, restarting timer")
+            await asyncio.sleep(delay)
+            self.logger.debug(f"Timer ended, attempting matchmaking")
+            await self.matchmake(ctx.interaction)
+
+        self.logger.debug(f"Not restarting timer, no players in queue")
