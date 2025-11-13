@@ -52,20 +52,26 @@ class MatchSelect(discord.ui.Select):
         self.bot.in_match[self.p1['discord_id']] = False
         self.bot.in_match[self.p2['discord_id']] = False
 
+        self.logger.debug(f"match report callback recieved value {self.values[0]}")
+        self.logger.debug(f"match report player1 is {self.p1['player_name']} ({self.p1['character']})")
+
         if self.values[0] == "Cancel Match":
             self.logger.info(f"Match has been cancelled between {self.p1['player_name']} and {self.p2['player_name']}")
             await interaction.respond(f"The match between <@{self.p1['discord_id']}>'s {self.p1['character']} and <@{self.p2['discord_id']}>'s {self.p2['character']} has been cancelled, and these player's characters will not be readded to the queue. Please rejoin the queue with these characters if you wish to keep matching.")
             await interaction.message.delete()
             return
-        elif self.values[0] == f"{self.p1['player_name']} {self.p1['character']}":
+        elif self.values[0] == f"{self.p1['player_name']} ({self.p1['character']})":
             await self.bot.report_match_queue(interaction, self.p1, self.p2, "player1")
-        else:
+        elif self.values[0] == f"{self.p2['player_name']} ({self.p2['character']})":
             await self.bot.report_match_queue(interaction, self.p1, self.p2, "player2")
-        
-        if self.p1['requeue']:
-            self.bot.rejoin_queue(self.p1)
-        if self.p2['requeue']:
-            self.bot.rejoin_queue(self.p2)
+        else:
+            await interaction.respond(f"A match reporting error has occured, report didn't match either player. You should never see this.")
+
+        # Removed rejoining queue in favour of requeue button        
+        # if self.p1['requeue']:
+        #     self.bot.rejoin_queue(self.p1)
+        # if self.p2['requeue']:
+        #     self.bot.rejoin_queue(self.p2)
 
         # await self.bot.matchmake(interaction) # disabling automatic matchmaking
 
@@ -99,3 +105,54 @@ class MatchView(discord.ui.View):
     #         json.dump(overlay,f)
 
     #     await interaction.respond("Stream Updated") 
+
+class RequeueView(discord.ui.View):
+    def __init__(self, bot, p1, p2):
+        super().__init__(timeout=60.0, disable_on_timeout=True)
+        self.bot = bot
+        self.p1 = p1
+        self.p2 = p2
+        self.p1_rejoined = False
+        self.p2_rejoined = False
+
+        # Create and configure logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+
+    @discord.ui.button(label="Click to re-join the matchmaking queue as the same character", style=discord.ButtonStyle.primary)
+    async def button_callback(self, button, interaction):
+        await interaction.response.defer()
+        self.logger.debug(f"User {interaction.user.name} requested to rejoin the queue with button")
+        valid_ids = [self.p1['discord_id'], self.p2['discord_id']]
+
+        if interaction.user.id not in valid_ids:
+            await interaction.respond(content=f"You weren't in this match, so you cannot use this button to rejoin the queue.", ephemeral=True)
+
+        if self.p1['discord_id'] == interaction.user.id and not self.p1_rejoined:
+            self.bot.rejoin_queue(self.p1)
+            await interaction.respond(content=f"{self.p1['player_name']}'s {self.p1['character']} has rejoined the matchmaking queue!", ephemeral=True)
+            self.p1_rejoined = True
+        elif self.p2['discord_id'] == interaction.user.id and not self.p2_rejoined:
+            self.bot.rejoin_queue(self.p2)
+            await interaction.respond(content=f"{self.p2['player_name']}'s {self.p2['character']} has rejoined the matchmaking queue!", ephemeral=True)
+            self.p2_rejoined = True
+        else:
+            await interaction.respond(content=f"You've already re-joined the queue.", ephemeral=True)
+
+    # Override default
+    async def on_timeout(self) -> None:
+        if self.disable_on_timeout:
+            self.disable_all_items()
+
+            if not self._message or self._message.flags.ephemeral:
+                message = self.parent
+            else:
+                message = self.message
+
+            if message:
+                m = await message.edit(view=None)
+                if m:
+                    self._message = m
+
+        
+
