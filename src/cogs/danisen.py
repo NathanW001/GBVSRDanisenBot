@@ -10,7 +10,7 @@ from random import shuffle
 class Danisen(commands.Cog):
     # Predefined characters and players
     characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "Avatar Belial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
-    players = []
+    players = ["player1", "player2"] # These are the presets for specifying which player won in /reportmatch, NOT danisen player names
     dan_colours = [
         discord.Colour.from_rgb(237, 237, 237), discord.Colour.from_rgb(176, 105, 48), discord.Colour.from_rgb(150, 150, 150),
         discord.Colour.from_rgb(227, 197, 45), discord.Colour.from_rgb(23, 209, 66), discord.Colour.from_rgb(105, 215, 240), discord.Colour.from_rgb(178, 75, 219),
@@ -140,7 +140,7 @@ class Danisen(commands.Cog):
             
             if can_rankup:
                 winner_rank[0] += 1
-                winner_rank[1] = winner_rank[1] % rankup_points if self.point_rollover else 0
+                winner_rank[1] = winner_rank[1] % rankup_points if self.point_rollover else 0.0
                 rankup = True
 
         # Rankdown logic
@@ -161,7 +161,9 @@ class Danisen(commands.Cog):
 
         # Update roles on rankup/down
         if rankup:
-            dan = self.get_players_highest_dan(ctx, winner)
+            self.logger.debug(f"Winning player ranked up, attempting to assign roles")
+            dan = self.get_players_highest_dan(ctx, winner['player_name'])
+            self.logger.debug(f"Winning player's highest character dan is {dan}, rankup dan is {winner_rank[0]}")
             if dan and dan == winner_rank[0]: # it's their highest ranked character that just ranked up, since the table is updated first we check for equality
                 role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0]}")
                 member = ctx.guild.get_member(winner['discord_id'])
@@ -173,9 +175,11 @@ class Danisen(commands.Cog):
                     await member.remove_roles(role)
 
         if rankdown:
-            dan = self.get_players_highest_dan(ctx, loser)
+            self.logger.debug(f"Losing player ranked down, attempting to assign roles")
+            dan = self.get_players_highest_dan(ctx, loser['player_name'])
+            self.logger.debug(f"Winning player's highest character dan is {dan}, rankdown dan is {loser_rank[0]}")
             if dan and dan == loser_rank[0]: # same as above, hopefully
-                role = discord.utils.get(ctx.guild.roles, name=f"Dan {lower_rank[0]}")
+                role = discord.utils.get(ctx.guild.roles, name=f"Dan {loser_rank[0]}")
                 member = ctx.guild.get_member(loser['discord_id'])
                 bot_member = ctx.guild.get_member(self.bot.user.id)
                 if role and self.can_manage_role(bot_member, role):
@@ -234,7 +238,7 @@ class Danisen(commands.Cog):
             if role and self.can_manage_role(bot_member, role):
                 await member.add_roles(role)
 
-        await ctx.respond(f"{player_name}'s {char} rank updated to be dan {dan} points {points}")
+        await ctx.respond(f"{player_name}'s {char} rank updated to be Dan {dan}, {round(points, 1)} points.")
 
     @discord.commands.slash_command(description="Displays a help message and a list of commands.")
     async def help(self, ctx : discord.ApplicationContext):
@@ -433,7 +437,7 @@ class Danisen(commands.Cog):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={id} AND character='{char}'")
         data = res.fetchone()
         if data:
-            await ctx.respond(f"""{data['player_name']}'s rank for {char} is Dan {data['dan']}, {data['points']} points""")
+            await ctx.respond(f"""{data['player_name']}'s rank for {char} is Dan {data['dan']}, {round(data['points'], 1)} points""")
         else:
             await ctx.respond(f"""{member.name} is not registered as {char}.""")
 
@@ -522,7 +526,7 @@ class Danisen(commands.Cog):
         #     len(self.matchmaking_queue) >= 2):
         #     await self.matchmake(ctx.interaction)
 
-    def rejoin_queue(self, player):
+    async def rejoin_queue(self, player):
         if self.queue_status == False:
             return
 
@@ -542,6 +546,8 @@ class Danisen(commands.Cog):
         self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
         self.matchmaking_queue.append(player)
 
+        await self.begin_matchmaking_timer(ctx, 30) # Attempt to restart the timer, if it's stopped
+
     @discord.commands.slash_command(name="viewqueue", description="view players in the queue")
     async def view_queue(self, ctx : discord.ApplicationContext):
         em = discord.Embed(
@@ -552,7 +558,7 @@ class Danisen(commands.Cog):
         for player in self.matchmaking_queue:
             if player:
                 em.add_field(name=f"{player['player_name']} ({player['character']})", 
-                        value=f"Dan {player['dan']}, {player['points']} points", 
+                        value=f"Dan {player['dan']}, {round(player['points'], 1)} points", 
                         inline=False) 
         
         await ctx.send_response(embed=em)
@@ -610,7 +616,7 @@ class Danisen(commands.Cog):
                     daniel2 = self.dans_in_queue[dan].popleft()
                     self.logger.debug(f"Dequeued daniel2 from dans_in_queue[{dan}]: {daniel2}")
 
-                    self.logger.debug(f"first {str(daniel2['discord_id'])+"@"+daniel2['character']}, second {self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]}")
+                    self.logger.debug(f"player identifier: {str(daniel2['discord_id'])+"@"+daniel2['character']}, daniel1 recent: {self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]}")
                     if str(daniel2['discord_id'])+"@"+daniel2['character'] in self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]:
                         self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents.")
                         old_daniels.append(daniel2)
@@ -631,8 +637,16 @@ class Danisen(commands.Cog):
                         old_daniels.append(daniel2)
                         continue
 
+                    # This is an old implementation but I'm keeping it here in case the new one breaks
+                    # self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([str(daniel1['discord_id'])+"@"+daniel1['character']], maxlen=self.recent_opponents_limit)] # why does this do this instead of just mutate
+                    # self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(str(daniel2['discord_id'])+"@"+daniel2['character'])
 
-                    self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([str(daniel1['discord_id'])+"@"+daniel1['character']], maxlen=self.recent_opponents_limit)] # why does this do this instead of just mutate
+                    if str(daniel2['discord_id'])+"@"+daniel2['character'] in self.in_queue:
+                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][0] = False
+                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][1].append(str(daniel1['discord_id'])+"@"+daniel1['character'])
+                    else:
+                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([str(daniel1['discord_id'])+"@"+daniel1['character']], maxlen=self.recent_opponents_limit)]
+
                     self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(str(daniel2['discord_id'])+"@"+daniel2['character'])
 
                     # Clean up the main queue for players that have already been matched
@@ -652,7 +666,8 @@ class Danisen(commands.Cog):
                     break
 
             # Re-add all skipped old_daniels back into the queue
-            for old_daniel in old_daniels:
+            self.logger.debug(f"Current matchmaking round finished, adding old_daniels {old_daniels} back into their dan queues")
+            for old_daniel in reversed(old_daniels):
                 self.logger.debug(f"Re-adding skipped daniel {old_daniel} back to dans_in_queue[{old_daniel['dan']}].")
                 self.dans_in_queue[old_daniel['dan']].appendleft(old_daniel)
                 self.in_queue[str(old_daniel['discord_id'])+"@"+old_daniel['character']][0] = True
@@ -670,14 +685,14 @@ class Danisen(commands.Cog):
 
     async def create_match_interaction(self, ctx: discord.Interaction, daniel1, daniel2):
         self.cur_active_matches += 1
-        view = MatchView(self, daniel1, daniel2) # I have no need for this
+        view = MatchView(self, daniel1, daniel2) # Report Match Dropdown
         id1 = f"<@{daniel1['discord_id']}>"
         id2 = f"<@{daniel2['discord_id']}>"
 
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {daniel1['points']} points)\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {daniel2['points']} points)"
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points)\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)"
                 "\n\nAll sets are FT2, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
             )
@@ -693,7 +708,7 @@ class Danisen(commands.Cog):
             )
 
     #report match score
-    @discord.commands.slash_command(description="Report a match score")
+    @discord.commands.slash_command(name="reportmatch", description="Report a match score")
     @discord.commands.default_permissions(send_polls=True)
     async def report_match(self, ctx: discord.ApplicationContext,
                            player1_name: discord.Option(str, autocomplete=player_autocomplete),
@@ -730,8 +745,8 @@ class Danisen(commands.Cog):
 
         await ctx.respond(
             f"### The match has been reported as {winner}'s victory over {loser}!\n"
-            f"{player1_name}'s {char1} is now Dan {winner_rank[0]}, {winner_rank[1]} points.\n"
-            f"{player2_name}'s {char2} is now Dan {loser_rank[0]}, {loser_rank[1]} points."
+            f"{player1_name}'s {char1} is now Dan {winner_rank[0]}, {round(winner_rank[1], 1)} points.\n"
+            f"{player2_name}'s {char2} is now Dan {loser_rank[0]}, {round(loser_rank[1], 1)} points."
         )
 
     #report match score for the queue
@@ -749,31 +764,35 @@ class Danisen(commands.Cog):
             loser = player1['player_name']
             loser_char = player1['character']
 
+        view = RequeueView(self, player1, player2)
+
         channel = self.bot.get_channel(self.REPORTED_MATCHES_CHANNEL_ID)
         if channel:
             await channel.send(
-                f"### The match has been reported as {winner}'s victory over {loser}!\n"
-                f"{winner}'s {winner_char} is now Dan {winner_rank[0]}, {winner_rank[1]} points.\n"
-                f"{loser}'s {loser_char} is now Dan {loser_rank[0]}, {loser_rank[1]} points."
+                content=f"### The match has been reported as {winner}'s victory over {loser}!\n"
+                f"{winner}'s {winner_char} is now Dan {winner_rank[0]}, {round(winner_rank[1], 1)} points.\n"
+                f"{loser}'s {loser_char} is now Dan {loser_rank[0]}, {round(loser_rank[1], 1)} points.",
+                view=view
                 )
         else:
             self.logger.warning("No Report Matches Channel")
 
-    @discord.commands.slash_command(description="See players in a specific dan")
-    async def dan(self, ctx: discord.ApplicationContext,
-                  dan: discord.Option(int, min_value=DEFAULT_DAN, max_value=MAX_DAN_RANK)):
-        daniels = self.get_players_by_dan(dan)
-        data = [
-            {
-                "name": f"{daniel['player_name']} {daniel['character']}",
-                "value": f"Dan: {daniel['dan']} Points: {daniel['points']}"
-            }
-            for daniel in daniels
-        ]
-        embeds = self.create_paginated_embeds(f"Dan {dan}", data, MAX_FIELDS_PER_EMBED, colour=self.dan_colours[dan - 1])
-        paginator = pages.Paginator(pages=embeds)
+    # Temporarily disabled, no need to see players of a specific dan
+    # @discord.commands.slash_command(description="See players in a specific dan")
+    # async def dan(self, ctx: discord.ApplicationContext,
+    #               dan: discord.Option(int, min_value=DEFAULT_DAN, max_value=MAX_DAN_RANK)):
+    #     daniels = self.get_players_by_dan(dan)
+    #     data = [
+    #         {
+    #             "name": f"{daniel['player_name']} {daniel['character']}",
+    #             "value": f"Dan {daniel['dan']}, {round(daniel['points'], 1)} points"
+    #         }
+    #         for daniel in daniels
+    #     ]
+    #     embeds = self.create_paginated_embeds(f"Dan {dan}", data, MAX_FIELDS_PER_EMBED, colour=self.dan_colours[dan - 1])
+    #     paginator = pages.Paginator(pages=embeds)
 
-        await paginator.respond(ctx.interaction, ephemeral=False)
+    #     await paginator.respond(ctx.interaction, ephemeral=False)
 
     # Add a helper function for paginated embeds
     def create_paginated_embeds(self, title, data, fields_per_page, colour=None):
@@ -782,35 +801,37 @@ class Danisen(commands.Cog):
         total_pages = (len(data) // fields_per_page) + 1
         items_per_page = len(data) // total_pages
         for page in range(total_pages):
-            em = discord.Embed(title=f"({title} {page + 1}/{total_pages})", colour=colour)
+            em = discord.Embed(title=f"{title} ({page + 1}/{total_pages})", colour=colour)
             page_list.append(em)
             for idx in range(page * items_per_page, min((page + 1) * items_per_page, len(data))):
-                em.add_field(name=f"{data[idx]['name']}", value=f"{data[idx]['value']}")
+                em.add_field(name=f"#{idx+1}: {data[idx]['name']}", value=f"Current Rank: {data[idx]['value']}", inline=False)
         return page_list
 
     # Refactor danisen_stats to use the helper function
-    @discord.commands.slash_command(name="danisenstats", description="See various statistics about the danisen")
-    async def danisen_stats(self, ctx: discord.ApplicationContext):
-        char_count = self.database_cur.execute(
-            "SELECT character AS name, COUNT(*) AS value FROM players GROUP BY character ORDER BY character"
-        ).fetchall()
-        dan_count = self.database_cur.execute(
-            "SELECT dan AS name, COUNT(*) AS value FROM players GROUP BY dan ORDER BY dan"
-        ).fetchall()
+    # @discord.commands.slash_command(name="danisenstats", description="See various statistics about the danisen")
+    # async def danisen_stats(self, ctx: discord.ApplicationContext):
+    #     char_count = self.database_cur.execute(
+    #         "SELECT character AS name, COUNT(*) AS value FROM players GROUP BY character ORDER BY character"
+    #     ).fetchall()
+    #     dan_count = self.database_cur.execute(
+    #         "SELECT dan AS name, COUNT(*) AS value FROM players GROUP BY dan ORDER BY dan"
+    #     ).fetchall()
 
-        # reformat dan count as their names are just numbers
-        dan_count = [{"name": f"Dan {dan['name']}", "value": dan['value']} for dan in dan_count]
-        char_pages = self.create_paginated_embeds("Character Stats", char_count, MAX_FIELDS_PER_EMBED)
-        dan_pages = self.create_paginated_embeds("Dan Stats", dan_count, MAX_FIELDS_PER_EMBED, colour=discord.Color.blurple())
+    #     # reformat dan count as their names are just numbers
+    #     dan_count = [{"name": f"Dan {dan['name']}", "value": dan['value']} for dan in dan_count]
+    #     char_pages = self.create_paginated_embeds("Character Stats", char_count, MAX_FIELDS_PER_EMBED)
+    #     dan_pages = self.create_paginated_embeds("Dan Stats", dan_count, MAX_FIELDS_PER_EMBED, colour=discord.Color.blurple())
 
-        paginator = pages.Paginator(pages=char_pages + dan_pages)
-        await paginator.respond(ctx.interaction, ephemeral=False)
+    #     paginator = pages.Paginator(pages=char_pages + dan_pages)
+    #     await paginator.respond(ctx.interaction, ephemeral=False)
+
+    # I've currently commented this out, I intend to reimplement it using a different sqlite table and more extensive stats tracking
 
     # Refactor leaderboard to use the helper function
     @discord.commands.slash_command(description="See the top players")
     async def leaderboard(self, ctx: discord.ApplicationContext):
         daniels = self.database_cur.execute(
-            "SELECT player_name || ' ' || character AS name, 'Dan: ' || dan || ' Points: ' || points AS value "
+            "SELECT player_name || '''s ' || character AS name, 'Dan ' || dan || ', ' || points || ' points' AS value "
             "FROM players ORDER BY dan DESC, points DESC"
         ).fetchall()
 
@@ -1008,7 +1029,7 @@ class Danisen(commands.Cog):
         for row in res:
             em.add_field(
                 name=row["character"], 
-                value=f"Dan: {row['dan']}, Points: {row['points']}", 
+                value=f"Dan {row['dan']}, {round(row['points'], 1)} points", 
                 inline=False
             )
 
