@@ -129,11 +129,11 @@ class RequeueView(discord.ui.View):
             await interaction.respond(content=f"You weren't in this match, so you cannot use this button to rejoin the queue.", ephemeral=True)
 
         if self.p1['discord_id'] == interaction.user.id and not self.p1_rejoined:
-            self.bot.rejoin_queue(self.p1)
+            await self.bot.rejoin_queue(self.p1)
             await interaction.respond(content=f"{self.p1['player_name']}'s {self.p1['character']} has rejoined the matchmaking queue!", ephemeral=True)
             self.p1_rejoined = True
         elif self.p2['discord_id'] == interaction.user.id and not self.p2_rejoined:
-            self.bot.rejoin_queue(self.p2)
+            await self.bot.rejoin_queue(self.p2)
             await interaction.respond(content=f"{self.p2['player_name']}'s {self.p2['character']} has rejoined the matchmaking queue!", ephemeral=True)
             self.p2_rejoined = True
         else:
