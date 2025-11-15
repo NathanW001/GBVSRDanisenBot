@@ -877,7 +877,7 @@ class Danisen(commands.Cog):
     @discord.commands.slash_command(description="See the top players")
     async def leaderboard(self, ctx: discord.ApplicationContext):
         daniels = self.database_cur.execute(
-            "SELECT player_name || '''s ' || character AS name, 'Dan ' || dan || ', ' || points || ' points' AS value "
+            "SELECT player_name || '''s ' || character AS name, 'Dan ' || dan || ', ' || ROUND(points, 1) || ' points' AS value "
             "FROM players ORDER BY dan DESC, points DESC"
         ).fetchall()
 
