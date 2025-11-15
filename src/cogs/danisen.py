@@ -6,7 +6,7 @@ import os
 from collections import deque
 from constants import *
 from random import shuffle
-
+from datetime import datetime
 class Danisen(commands.Cog):
     # Predefined characters and players
     characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "Avatar Belial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
@@ -16,6 +16,7 @@ class Danisen(commands.Cog):
         discord.Colour.from_rgb(227, 197, 45), discord.Colour.from_rgb(23, 209, 66), discord.Colour.from_rgb(105, 215, 240), discord.Colour.from_rgb(178, 75, 219),
         discord.Colour.from_rgb(252, 166, 220), discord.Colour.from_rgb(17, 20, 172), discord.Colour.from_rgb(240, 64, 48),
     ] 
+    emoji_mapping = {"Gran": "<:Gran:1438571506681647235>", "Djeeta": "<:Djeeta:1438571497429012662>", "Katalina": "<:Katalina:1438571940683059331>", "Charlotta": "<:Charlotta:1438571495444975678>", "Lancelot": "<:Lancelot:1438571515275645149>", "Percival": "<:Percival:1438571533768327280>", "Ladiva": "<:Ladiva:1438571512142499930>", "Metera": "<:Metera:1438571526126567554>", "Lowain": "<:Lowain:1438571942989791313>", "Ferry": "<:Ferry:1438571501594083439>", "Zeta": "<:Zeta:1438571475958501406>", "Vaseraga": "<:Vaseraga:1438571464038154280>", "Narmaya": "<:Narmaya:1438571944579694765>", "Soriz": "<:Soriz:1438571459533340764>", "Zooey": "<:Zooey:1438571477971763262>", "Cagliostro": "<:Cagliostro:1438571948996038768>", "Yuel": "<:Yuel:1438571474104352860>", "Anre": "<:Anre:1438571481586995301>", "Eustace": "<:Eustace:1438571950828949666>", "Seox": "<:Seox:1438571538919198790>", "Vira": "<:Vira:1438571469792612393>", "Beelzebub": "<:Beelzebub:1438571488679825438>", "Belial": "<:Belial:1438571491858845767>", "Avatar Belial": "<:AvatarBelial:1438910182825525368>", "Anila": "<:Anila:1438571479741632522>", "Siegfried": "<:Siegfried:1438571541833973831>", "Grimnir": "<:Grimnir:1438571508195790959>", "Nier": "<:Nier:1438571530157293710>", "Lucilius": "<:Lucilius:1438571519419748528>", "2B": "<:2B:1438571398682513529>", "Vane": "<:Vane:1438571462351917197>", "Beatrix": "<:Beatrix:1438571485588357140>", "Versusia": "<:Versusia:1438571466051555378>", "Vikala": "<:Vikala:1438571468060622909>", "Sandalphon": "<:Sandalphon:1438571947628822538>", "Galleon": "<:Galleon:1438571953245126676>", "Wilnas": "<:Wilnas:1438571471671787520>", "Meg": "<:Meg:1438571524180414516>"}
 
     def __init__(self, bot, database, config_path):
         # Initialize the cog
@@ -59,14 +60,15 @@ class Danisen(commands.Cog):
         # Set all configuration values
         self.ACTIVE_MATCHES_CHANNEL_ID = int(config.get('ACTIVE_MATCHES_CHANNEL_ID', 0))
         self.REPORTED_MATCHES_CHANNEL_ID = int(config.get('REPORTED_MATCHES_CHANNEL_ID', 0))
+        self.ONGOING_MATCHES_CHANNEL_ID = int(config.get('ONGOING_MATCHES_CHANNEL_ID', 0))
         self.total_dans = config.get('total_dans', MAX_DAN_RANK)
         self.minimum_derank = config.get('minimum_derank', DEFAULT_DAN)
         self.rank_gap_for_more_points_1 = config.get('rank_gap_for_more_points_1', 2)
         self.rank_gap_for_more_points_2 = config.get("rank_gap_for_more_points_2", 4)
         self.point_rollover = config.get('point_rollover', True)
         self.queue_status = config.get('queue_status', True)
-        self.recent_opponents_limit = config.get('recent_opponents_limit', 2)
-        self.max_active_matches = config.get('max_active_matches', 3)  # New parameter
+        self.recent_opponents_limit = config.get('recent_opponents_limit', 3)
+        self.max_active_matches = config.get('max_active_matches', 5)  # New parameter
         self.special_rank_up_rules = config.get('special_rank_up_rules', False)
 
     @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
@@ -526,7 +528,7 @@ class Danisen(commands.Cog):
         #     len(self.matchmaking_queue) >= 2):
         #     await self.matchmake(ctx.interaction)
 
-    async def rejoin_queue(self, player):
+    async def rejoin_queue(self, ctx, player):
         if self.queue_status == False:
             return
 
@@ -685,14 +687,27 @@ class Danisen(commands.Cog):
 
     async def create_match_interaction(self, ctx: discord.Interaction, daniel1, daniel2):
         self.cur_active_matches += 1
-        view = MatchView(self, daniel1, daniel2) # Report Match Dropdown
+
+        # Send a message in the #active-matches channel
+        channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
+        active_match_msg = None
+        if channel:
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['player_name']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['player_name']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
+        else:
+            await ctx.respond(
+                f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
+            )
+
+        # Create view for dropdown reporting
+        view = MatchView(self, daniel1, daniel2, active_match_msg) # Report Match Dropdown
         id1 = f"<@{daniel1['discord_id']}>"
         id2 = f"<@{daniel2['discord_id']}>"
 
+        # Send the message with the view in the #dani-matches
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points)\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)"
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points) {self.emoji_mapping[daniel2['character']]}"
                 "\n\nAll sets are FT2, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
             )
@@ -880,7 +895,7 @@ class Danisen(commands.Cog):
     @discord.commands.default_permissions(manage_guild=True)
     async def set_config(self, ctx: discord.ApplicationContext,
                          key: discord.Option(str, choices=[
-                             "ACTIVE_MATCHES_CHANNEL_ID", "REPORTED_MATCHES_CHANNEL_ID",
+                             "ACTIVE_MATCHES_CHANNEL_ID", "REPORTED_MATCHES_CHANNEL_ID", "ONGOING_MATCHES_CHANNEL_ID",
                              "total_dans", "minimum_derank", "maximum_rank_difference",
                              "rank_gap_for_more_points_1", "rank_gap_for_more_points_2" "point_rollover", "queue_status",
                              "recent_opponents_limit", "max_active_matches", "special_rank_up_rules"
@@ -1028,7 +1043,7 @@ class Danisen(commands.Cog):
 
         for row in res:
             em.add_field(
-                name=row["character"], 
+                name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
                 value=f"Dan {row['dan']}, {round(row['points'], 1)} points", 
                 inline=False
             )
