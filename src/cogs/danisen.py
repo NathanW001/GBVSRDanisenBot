@@ -342,10 +342,10 @@ class Danisen(commands.Cog):
         else:
             self.logger.warning("Could not add roles due to bot's role being too low")
 
-        if char_count > 0:
+        if regged_chars > 0:
             await ctx.respond(
                 f"You are now registered as {player_nickname} ({player_name}) with {char1}!\n"
-                f"You have registered {char_count+1}/3 characters to the Danisen. Have fun!"
+                f"You have registered {regged_chars+1}/3 characters to the Danisen. Have fun!"
             )
         else:
             await ctx.respond(
