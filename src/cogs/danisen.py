@@ -7,6 +7,7 @@ from collections import deque
 from constants import *
 from random import shuffle
 from datetime import datetime
+
 class Danisen(commands.Cog):
     # Predefined characters and players
     characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "Avatar Belial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
@@ -42,6 +43,9 @@ class Danisen(commands.Cog):
         self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
         self.in_match = {}  # Format: discord_id: in_match
         self.matchmaking_coro = None  # Task created with asyncio to run start_matchmaking after a set delay
+
+        # Synchronization
+        self.queue_lock = asyncio.Lock()
 
     def can_manage_role(self, bot_member, role):
         # Check if the bot can manage a specific role
@@ -298,9 +302,12 @@ class Danisen(commands.Cog):
 
         self.logger.info(f"Player has {res["char_count"]} characters.")
 
-        if res["char_count"] >= 3:
-            await ctx.respond(f"You are already registered with 3 characters. Please unregister one of your characters before registering a new character.")
-            return        
+        regged_chars = 0
+        if res:
+            regged_chars = res["char_count"]
+            if res["char_count"] >= 3:
+                await ctx.respond(f"You are already registered with 3 characters. Please unregister one of your characters before registering a new character.")
+                return        
 
         # Insert the new player record
         line = (ctx.author.id, player_name, char1, DEFAULT_DAN, DEFAULT_POINTS)
@@ -335,11 +342,17 @@ class Danisen(commands.Cog):
         else:
             self.logger.warning("Could not add roles due to bot's role being too low")
 
-        await ctx.respond(
-            f"You are now registered as {player_nickname} ({player_name}) with {char1}!\n"
-            "If you wish to add more characters, you can register with up to 3 different characters!\n\n"
-            "Welcome to the Danisen!"
-        )
+        if char_count > 0:
+            await ctx.respond(
+                f"You are now registered as {player_nickname} ({player_name}) with {char1}!\n"
+                f"You have registered {char_count+1}/3 characters to the Danisen. Have fun!"
+            )
+        else:
+            await ctx.respond(
+                f"You are now registered as {player_nickname} ({player_name}) with {char1}!\n"
+                "If you wish to add more characters, you can register with up to 3 different characters!\n\n"
+                "Welcome to the Danisen!"
+            )
 
     @discord.commands.slash_command(description="Unregister a character from the Danisen database. Note this will reset dan and points.")
     async def unregister(self, ctx : discord.ApplicationContext, 
@@ -451,30 +464,33 @@ class Danisen(commands.Cog):
         self.logger.info(f"{ctx.author.name} requested to leave the queue")
         daniels = [] 
 
-        for member in self.matchmaking_queue:
-            self.logger.debug(f"Checking if player {member['player_name']} on character {member['character']} should leave queue.")
-            if member and (member['discord_id'] == discord_id) and (char is None or (char is not None and member['character'] == char)):
-                self.logger.debug(f"Player {member['player_name']} on character {member['character']} should leave queue.")
-                daniels.append(member)
+        self.logger.debug(f"leave_queue for player {ctx.author.name} awaiting lock")
+        async with self.queue_lock:
+            self.logger.debug(f"leave_queue for player {ctx.author.name} acquired lock")
+            for member in self.matchmaking_queue:
+                self.logger.debug(f"Checking if player {member['player_name']} on character {member['character']} should leave queue.")
+                if member and (member['discord_id'] == discord_id) and (char is None or (char is not None and member['character'] == char)):
+                    self.logger.debug(f"Player {member['player_name']} on character {member['character']} should leave queue.")
+                    daniels.append(member)
 
-        if char is not None and daniels != []:
-            for daniel in daniels:
-                if daniel in self.dans_in_queue[daniel['dan']]:
-                    self.dans_in_queue[daniel['dan']].remove(daniel)
-                    self.matchmaking_queue.remove(daniel)
+            if char is not None and daniels != []:
+                for daniel in daniels:
+                    if daniel in self.dans_in_queue[daniel['dan']]:
+                        self.dans_in_queue[daniel['dan']].remove(daniel)
+                        self.matchmaking_queue.remove(daniel)
 
-                self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
-            await ctx.respond(f"You have been removed from the queue as {char}.")
-        elif daniels != []:
-            for daniel in daniels:
-                if daniel in self.dans_in_queue[daniel['dan']]:
-                    self.dans_in_queue[daniel['dan']].remove(daniel)
-                    self.matchmaking_queue.remove(daniel)
+                    self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
+                await ctx.respond(f"You have been removed from the queue as {char}.")
+            elif daniels != []:
+                for daniel in daniels:
+                    if daniel in self.dans_in_queue[daniel['dan']]:
+                        self.dans_in_queue[daniel['dan']].remove(daniel)
+                        self.matchmaking_queue.remove(daniel)
 
-                self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
-            await ctx.respond("You have been removed from the queue on all characters.")
-        else:
-            await ctx.respond("You are not in queue.")
+                    self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
+                await ctx.respond("You have been removed from the queue on all characters.")
+            else:
+                await ctx.respond("You are not in queue.")
 
     #joins the matchmaking queue
     @discord.commands.slash_command(name="joinqueue", description="queue up for danisen games")
@@ -482,7 +498,7 @@ class Danisen(commands.Cog):
                     char: discord.Option(str, autocomplete=character_autocomplete)):
         await ctx.defer()
         discord_id = ctx.author.id
-        rejoin_queue = True
+        rejoin_queue = False
 
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
@@ -503,25 +519,34 @@ class Danisen(commands.Cog):
         daniel = DanisenRow(daniel)
         daniel['requeue'] = rejoin_queue
 
-        #Check if in Queue already
-        self.logger.debug(f"checking that {str(discord_id)+"@"+char} is in {self.in_queue}: {str(discord_id)+"@"+char in self.in_queue} and {(str(discord_id)+"@"+char in self.in_queue) and self.in_queue[str(discord_id)+"@"+char][0]}")
-        if str(discord_id)+"@"+char in self.in_queue and self.in_queue[str(discord_id)+"@"+char][0]:
-            await ctx.respond(f"You are already in the queue as that character")
-            return
+        self.logger.debug(f"join_queue for player {daniel['player_name']} awaiting lock")
+        queue_add_success = False
+        async with self.queue_lock:
+            self.logger.debug(f"join_queue for player {daniel['player_name']} acquired lock")
+            #Check if in Queue already
+            self.logger.debug(f"checking that {str(discord_id)+"@"+char} is in {self.in_queue}: {str(discord_id)+"@"+char in self.in_queue} and {(str(discord_id)+"@"+char in self.in_queue) and self.in_queue[str(discord_id)+"@"+char][0]}")
+            if str(discord_id)+"@"+char in self.in_queue and self.in_queue[str(discord_id)+"@"+char][0]:
+                await ctx.respond(f"You are already in the queue as that character")
+                return
 
-        #check if in a match already
-        if discord_id in self.in_match and self.in_match[discord_id]:
-            await ctx.respond(f"You are in an active match and cannot queue up")
-            return
+            #check if in a match already
+            if discord_id in self.in_match and self.in_match[discord_id]:
+                await ctx.respond(f"You are in an active match and cannot queue up")
+                return
 
-        if self.in_queue.setdefault(str(discord_id)+"@"+char, [True, deque(maxlen=self.recent_opponents_limit)]):
-            self.in_queue[str(discord_id)+"@"+char][0] = True
-        self.in_match.setdefault(str(discord_id)+"@"+char, False)
+            if self.in_queue.setdefault(str(discord_id)+"@"+char, [True, deque(maxlen=self.recent_opponents_limit)]):
+                self.in_queue[str(discord_id)+"@"+char][0] = True
+            self.in_match.setdefault(str(discord_id)+"@"+char, False)
 
-        self.dans_in_queue[daniel['dan']].append(daniel)
-        self.matchmaking_queue.append(daniel)
-        await ctx.respond(f"You've been added to the matchmaking queue with {char}")
-        await self.begin_matchmaking_timer(ctx, 30)
+            self.dans_in_queue[daniel['dan']].append(daniel)
+            self.matchmaking_queue.append(daniel)
+            queue_add_success = True
+        
+        if queue_add_success:
+            await ctx.respond(f"You've been added to the matchmaking queue with {char}")
+            await self.begin_matchmaking_timer(ctx, 30)
+        else:
+            await ctx.respond(f"An error with the queue mutex or code within has occured, please contact and admin.")
 
         #matchmake
         # if (self.cur_active_matches < self.max_active_matches and  # Taking out automatic matchmaking
@@ -540,13 +565,16 @@ class Danisen(commands.Cog):
         player = DanisenRow(db_player)  # Transform the database row into a DanisenRow
         player['requeue'] = True
 
-        # Ensure the player is initialized in self.in_queue
-        if str(player['discord_id'])+"@"+player['character'] not in self.in_queue:
-            self.in_queue[str(player['discord_id'])+"@"+player['character']] = [False, deque(maxlen=self.recent_opponents_limit)]
+        self.logger.debug(f"rejoin_queue for player {player['player_name']} awaiting lock")
+        async with self.queue_lock:
+            self.logger.debug(f"rejoin_queue for player {player['player_name']} acquired lock")
+            # Ensure the player is initialized in self.in_queue
+            if str(player['discord_id'])+"@"+player['character'] not in self.in_queue:
+                self.in_queue[str(player['discord_id'])+"@"+player['character']] = [False, deque(maxlen=self.recent_opponents_limit)]
 
-        self.in_queue[str(player['discord_id'])+"@"+player['character']][0] = True
-        self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
-        self.matchmaking_queue.append(player)
+            self.in_queue[str(player['discord_id'])+"@"+player['character']][0] = True
+            self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
+            self.matchmaking_queue.append(player)
 
         await self.begin_matchmaking_timer(ctx, 30) # Attempt to restart the timer, if it's stopped
 
@@ -567,7 +595,10 @@ class Danisen(commands.Cog):
 
     @discord.commands.slash_command(name="startmatchmaking", description="Start matchmaking.")
     async def start_matchmaking(self, ctx: discord.ApplicationContext):
-        await self.matchmake(ctx.interaction)
+        self.logger.debug(f"matchmake command from start_matchmaking awaiting lock")
+        async with self.queue_lock:
+            self.logger.debug(f"matchmake command from start_matchmaking acquired lock")
+            await self.matchmake(ctx.interaction)
         await ctx.respond("Finished matchmaking")
 
     async def matchmake(self, ctx: discord.Interaction):
@@ -1085,12 +1116,18 @@ class Danisen(commands.Cog):
     async def matchmaking_timer(self, ctx: discord.ApplicationContext, delay: int):
         await asyncio.sleep(delay)
         self.logger.debug(f"Timer ended, attempting matchmaking")
-        await self.matchmake(ctx.interaction)
+        self.logger.debug(f"matchmake command from matchmaking_timer awaiting lock")
+        async with self.queue_lock:
+            self.logger.debug(f"matchmake command from matchmaking_timer acquired lock")
+            await self.matchmake(ctx.interaction)
 
         while len(self.matchmaking_queue) > 0:
             self.logger.debug(f"players still detected in queue, restarting timer")
             await asyncio.sleep(delay)
             self.logger.debug(f"Timer ended, attempting matchmaking")
-            await self.matchmake(ctx.interaction)
+            self.logger.debug(f"matchmake command from matchmaking_timer awaiting lock")
+            async with self.queue_lock:
+                self.logger.debug(f"matchmake command from matchmaking_timer acquired lock")
+                await self.matchmake(ctx.interaction)
 
         self.logger.debug(f"Not restarting timer, no players in queue")
