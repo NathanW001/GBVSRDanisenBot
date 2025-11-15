@@ -17,16 +17,17 @@ LOG_FILE = os.path.join(PROJECT_ROOT, 'bot.log')
 DEFAULT_CONFIG = {
     "ACTIVE_MATCHES_CHANNEL_ID": "0",
     "REPORTED_MATCHES_CHANNEL_ID": "0",
+    "ONGOING_MATCHES_CHANNEL_ID": "0",
     "total_dans": 12,
     "minimum_derank": 1,
     "maximum_rank_difference": 1,
     "rank_gap_for_more_points_1": 2,
     "rank_gap_for_more_points_2": 4,
-    "recent_opponents_limit": 2,
+    "recent_opponents_limit": 3,
     "point_rollover": True,
     "queue_status": True,
     "special_rank_up_rules": False,
-    "max_active_matches": 3
+    "max_active_matches": 5
 }
 # Logging colors
 LOG_COLORS = {

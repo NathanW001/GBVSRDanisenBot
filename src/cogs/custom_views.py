@@ -2,10 +2,11 @@ import discord
 import json
 import logging
 class MatchSelect(discord.ui.Select):
-    def __init__(self, bot, p1, p2):
+    def __init__(self, bot, p1, p2, active_match_msg):
         self.p1 = p1
         self.p2 = p2
         self.bot = bot
+        self.active_match_msg = active_match_msg
 
         # Create and configure logger
         self.logger = logging.getLogger(__name__)
@@ -55,6 +56,10 @@ class MatchSelect(discord.ui.Select):
         self.logger.debug(f"match report callback recieved value {self.values[0]}")
         self.logger.debug(f"match report player1 is {self.p1['player_name']} ({self.p1['character']})")
 
+        # Deletes message in #all-active-matches, if not None
+        if self.active_match_msg:
+            await self.active_match_msg.delete()
+
         if self.values[0] == "Cancel Match":
             self.logger.info(f"Match has been cancelled between {self.p1['player_name']} and {self.p2['player_name']}")
             await interaction.respond(f"The match between <@{self.p1['discord_id']}>'s {self.p1['character']} and <@{self.p2['discord_id']}>'s {self.p2['character']} has been cancelled, and these player's characters will not be readded to the queue. Please rejoin the queue with these characters if you wish to keep matching.")
@@ -80,11 +85,11 @@ class MatchSelect(discord.ui.Select):
 
 class MatchView(discord.ui.View):
     # json_path = r"C:\\Users\Deled\Desktop\Danisen\\_overlays\streamcontrol.json"
-    def __init__(self, bot, p1, p2):
+    def __init__(self, bot, p1, p2, active_match_msg):
         super().__init__(timeout=None)
         self.p1 = p1
         self.p2 = p2
-        self.add_item(MatchSelect(bot, p1, p2))
+        self.add_item(MatchSelect(bot, p1, p2, active_match_msg))
     
     # @discord.ui.button(label="Update Stream", style=discord.ButtonStyle.primary)
     # async def button_callback(self, button, interaction):
@@ -129,11 +134,11 @@ class RequeueView(discord.ui.View):
             await interaction.respond(content=f"You weren't in this match, so you cannot use this button to rejoin the queue.", ephemeral=True)
 
         if self.p1['discord_id'] == interaction.user.id and not self.p1_rejoined:
-            await self.bot.rejoin_queue(self.p1)
+            await self.bot.rejoin_queue(interaction.context, self.p1)
             await interaction.respond(content=f"{self.p1['player_name']}'s {self.p1['character']} has rejoined the matchmaking queue!", ephemeral=True)
             self.p1_rejoined = True
         elif self.p2['discord_id'] == interaction.user.id and not self.p2_rejoined:
-            await self.bot.rejoin_queue(self.p2)
+            await self.bot.rejoin_queue(interaction.context, self.p2)
             await interaction.respond(content=f"{self.p2['player_name']}'s {self.p2['character']} has rejoined the matchmaking queue!", ephemeral=True)
             self.p2_rejoined = True
         else:
