@@ -452,7 +452,7 @@ class Danisen(commands.Cog):
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={id} AND character='{char}'")
         data = res.fetchone()
         if data:
-            await ctx.respond(f"""{data['player_name']}'s rank for {char} is Dan {data['dan']}, {round(data['points'], 1)} points""")
+            await ctx.respond(f"""{data['player_name']}'s rank for {char} is Dan {data['dan']}, {round(data['points'], 1):.1f} points""")
         else:
             await ctx.respond(f"""{member.name} is not registered as {char}.""")
 
@@ -588,7 +588,7 @@ class Danisen(commands.Cog):
         for player in self.matchmaking_queue:
             if player:
                 em.add_field(name=f"{player['player_name']} ({player['character']})", 
-                        value=f"Dan {player['dan']}, {round(player['points'], 1)} points", 
+                        value=f"Dan {player['dan']}, {round(player['points'], 1):.1f} points", 
                         inline=False) 
         
         await ctx.send_response(embed=em)
@@ -738,7 +738,7 @@ class Danisen(commands.Cog):
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points) {self.emoji_mapping[daniel2['character']]}"
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1):.1f} points) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1):.1f} points) {self.emoji_mapping[daniel2['character']]}"
                 "\n\nAll sets are FT2, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
             )
@@ -791,8 +791,8 @@ class Danisen(commands.Cog):
 
         await ctx.respond(
             f"### The match has been reported as {winner}'s victory over {loser}!\n"
-            f"{player1_name}'s {char1} is now Dan {winner_rank[0]}, {round(winner_rank[1], 1)} points.\n"
-            f"{player2_name}'s {char2} is now Dan {loser_rank[0]}, {round(loser_rank[1], 1)} points."
+            f"{player1_name}'s {char1} is now Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points.\n"
+            f"{player2_name}'s {char2} is now Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points."
         )
 
     #report match score for the queue
@@ -816,8 +816,8 @@ class Danisen(commands.Cog):
         if channel:
             await channel.send(
                 content=f"### The match has been reported as {winner}'s victory over {loser}!\n"
-                f"{winner}'s {winner_char} is now Dan {winner_rank[0]}, {round(winner_rank[1], 1)} points.\n"
-                f"{loser}'s {loser_char} is now Dan {loser_rank[0]}, {round(loser_rank[1], 1)} points.",
+                f"{winner}'s {winner_char} is now Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points.\n"
+                f"{loser}'s {loser_char} is now Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points.",
                 view=view
                 )
         else:
@@ -1075,7 +1075,7 @@ class Danisen(commands.Cog):
         for row in res:
             em.add_field(
                 name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
-                value=f"Dan {row['dan']}, {round(row['points'], 1)} points", 
+                value=f"Dan {row['dan']}, {round(row['points'], 1):.1f} points", 
                 inline=False
             )
 
