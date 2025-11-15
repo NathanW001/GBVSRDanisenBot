@@ -720,8 +720,8 @@ class Danisen(commands.Cog):
         self.cur_active_matches += 1
 
         # Send a message in the #active-matches channel
-        channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
-        # active_match_msg = None
+        # channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
+        active_match_msg = None
         # if channel:
         #     active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['player_name']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['player_name']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
         # else:
