@@ -129,7 +129,7 @@ class Danisen(commands.Cog):
             loser_rank[1] -= 1
 
         if loser_rank[0] == self.minimum_derank and loser_rank[1] < 0: # making sure loser can't go lower than minimum rank
-            loser_rank[1] = 0
+            loser_rank[1] = 0.0
         
 
         # Rankup logic with special rules
@@ -544,7 +544,7 @@ class Danisen(commands.Cog):
         
         if queue_add_success:
             await ctx.respond(f"You've been added to the matchmaking queue with {char}")
-            await self.begin_matchmaking_timer(ctx, 30)
+            await self.begin_matchmaking_timer(ctx.interaction, 30)
         else:
             await ctx.respond(f"An error with the queue mutex or code within has occured, please contact and admin.")
 
@@ -553,7 +553,7 @@ class Danisen(commands.Cog):
         #     len(self.matchmaking_queue) >= 2):
         #     await self.matchmake(ctx.interaction)
 
-    async def rejoin_queue(self, ctx, player):
+    async def rejoin_queue(self, interaction, player):
         if self.queue_status == False:
             return
 
@@ -576,7 +576,7 @@ class Danisen(commands.Cog):
             self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
             self.matchmaking_queue.append(player)
 
-        await self.begin_matchmaking_timer(ctx, 30) # Attempt to restart the timer, if it's stopped
+        await self.begin_matchmaking_timer(interaction, 30) # Attempt to restart the timer, if it's stopped
 
     @discord.commands.slash_command(name="viewqueue", description="view players in the queue")
     async def view_queue(self, ctx : discord.ApplicationContext):
@@ -721,13 +721,13 @@ class Danisen(commands.Cog):
 
         # Send a message in the #active-matches channel
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
-        active_match_msg = None
-        if channel:
-            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['player_name']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['player_name']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
-        else:
-            await ctx.respond(
-                f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
-            )
+        # active_match_msg = None
+        # if channel:
+        #     active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['player_name']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['player_name']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
+        # else:
+        #     await ctx.respond(
+        #         f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
+        #     )
 
         # Create view for dropdown reporting
         view = MatchView(self, daniel1, daniel2, active_match_msg) # Report Match Dropdown
@@ -1107,19 +1107,19 @@ class Danisen(commands.Cog):
         await self.view_queue(ctx)
 
     # This function is used to create an asynchronous task for the matchmaking timer if there is not one running
-    async def begin_matchmaking_timer(self, ctx: discord.ApplicationContext, delay: int):
+    async def begin_matchmaking_timer(self, interaction: discord.Interaction, delay: int):
         self.logger.debug(f"Attempting to start matchmaking timer")
         if self.matchmaking_coro is None or self.matchmaking_coro.done():
-            self.matchmaking_coro = asyncio.create_task(self.matchmaking_timer(ctx, delay))
+            self.matchmaking_coro = asyncio.create_task(self.matchmaking_timer(interaction, delay))
             self.logger.debug(f"Matchmaking timer started with {delay} seconds")
 
-    async def matchmaking_timer(self, ctx: discord.ApplicationContext, delay: int):
+    async def matchmaking_timer(self, interaction: discord.Interaction, delay: int):
         await asyncio.sleep(delay)
         self.logger.debug(f"Timer ended, attempting matchmaking")
         self.logger.debug(f"matchmake command from matchmaking_timer awaiting lock")
         async with self.queue_lock:
             self.logger.debug(f"matchmake command from matchmaking_timer acquired lock")
-            await self.matchmake(ctx.interaction)
+            await self.matchmake(interaction)
 
         while len(self.matchmaking_queue) > 0:
             self.logger.debug(f"players still detected in queue, restarting timer")
@@ -1128,6 +1128,6 @@ class Danisen(commands.Cog):
             self.logger.debug(f"matchmake command from matchmaking_timer awaiting lock")
             async with self.queue_lock:
                 self.logger.debug(f"matchmake command from matchmaking_timer acquired lock")
-                await self.matchmake(ctx.interaction)
+                await self.matchmake(interaction)
 
         self.logger.debug(f"Not restarting timer, no players in queue")
