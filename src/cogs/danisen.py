@@ -797,18 +797,30 @@ class Danisen(commands.Cog):
 
         self.logger.info(f"Reported match {player1_name} vs {player2_name} as {winner} win")
         if winner == "player1":
-            winner_rank, loser_rank = await self.score_update(ctx, player1, player2)
-            winner = player1_name
-            loser = player2_name
+            winner_rank, loser_rank = await self.score_update(interaction, player1,player2)
+            winner = player1['player_name']
+            winner_char = player1['character']
+            winner_old_dan = player1['dan']
+            winner_old_points = player1['points']
+            loser = player2['player_name']
+            loser_char = player2['character']
+            loser_old_dan = player2['dan']
+            loser_old_points = player2['points']
         else:
             loser_rank, winner_rank = await self.score_update(ctx, player2, player1)
-            winner = player2_name
-            loser = player1_name
+            winner = player2['player_name']
+            winner_char = player2['character']
+            winner_old_dan = player2['dan']
+            winner_old_points = player2['points']
+            loser = player1['player_name']
+            loser_char = player1['character']
+            loser_old_dan = player1['dan']
+            loser_old_points = player1['points']
 
         await ctx.respond(
             f"### The match has been reported as {winner}'s victory over {loser}!\n"
-            f"{player1_name}'s {char1}: Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points.\n"
-            f"{player2_name}'s {char2}: Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points."
+            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){", Rank up!" if winner_rank[2] else ""})\n"
+            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** (-{loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})"
         )
 
     #report match score for the queue
@@ -840,8 +852,8 @@ class Danisen(commands.Cog):
         if channel:
             await channel.send(
                 content=f"### The match has been reported as {winner}'s victory over {loser}!\n"
-                f"{winner}'s {winner_char} {emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){", Rank up!" if winner_rank[2] else ""})\n"
-                f"{loser}'s {loser_char} {emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** (-{loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})",
+                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){", Rank up!" if winner_rank[2] else ""})\n"
+                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** (-{loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})",
                 view=view
                 )
         else:
