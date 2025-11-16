@@ -820,7 +820,7 @@ class Danisen(commands.Cog):
         await ctx.respond(
             f"### The match has been reported as {winner}'s victory over {loser}!\n"
             f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){", Rank up!" if winner_rank[2] else ""})\n"
-            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** (-{loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})"
+            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** ({loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})"
         )
 
     #report match score for the queue
@@ -853,7 +853,7 @@ class Danisen(commands.Cog):
             await channel.send(
                 content=f"### The match has been reported as {winner}'s victory over {loser}!\n"
                 f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){", Rank up!" if winner_rank[2] else ""})\n"
-                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** (-{loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})",
+                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** ({loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})",
                 view=view
                 )
         else:
