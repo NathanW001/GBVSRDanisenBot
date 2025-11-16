@@ -10,14 +10,14 @@ from datetime import datetime
 
 class Danisen(commands.Cog):
     # Predefined characters and players
-    characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "Avatar Belial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg"]
+    characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "Avatar Belial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg", "Lunalu"]
     players = ["player1", "player2"] # These are the presets for specifying which player won in /reportmatch, NOT danisen player names
     dan_colours = [
         discord.Colour.from_rgb(237, 237, 237), discord.Colour.from_rgb(176, 105, 48), discord.Colour.from_rgb(150, 150, 150),
         discord.Colour.from_rgb(227, 197, 45), discord.Colour.from_rgb(23, 209, 66), discord.Colour.from_rgb(105, 215, 240), discord.Colour.from_rgb(178, 75, 219),
         discord.Colour.from_rgb(252, 166, 220), discord.Colour.from_rgb(17, 20, 172), discord.Colour.from_rgb(240, 64, 48),
     ] 
-    emoji_mapping = {"Gran": "<:Gran:1438571506681647235>", "Djeeta": "<:Djeeta:1438571497429012662>", "Katalina": "<:Katalina:1438571940683059331>", "Charlotta": "<:Charlotta:1438571495444975678>", "Lancelot": "<:Lancelot:1438571515275645149>", "Percival": "<:Percival:1438571533768327280>", "Ladiva": "<:Ladiva:1438571512142499930>", "Metera": "<:Metera:1438571526126567554>", "Lowain": "<:Lowain:1438571942989791313>", "Ferry": "<:Ferry:1438571501594083439>", "Zeta": "<:Zeta:1438571475958501406>", "Vaseraga": "<:Vaseraga:1438571464038154280>", "Narmaya": "<:Narmaya:1438571944579694765>", "Soriz": "<:Soriz:1438571459533340764>", "Zooey": "<:Zooey:1438571477971763262>", "Cagliostro": "<:Cagliostro:1438571948996038768>", "Yuel": "<:Yuel:1438571474104352860>", "Anre": "<:Anre:1438571481586995301>", "Eustace": "<:Eustace:1438571950828949666>", "Seox": "<:Seox:1438571538919198790>", "Vira": "<:Vira:1438571469792612393>", "Beelzebub": "<:Beelzebub:1438571488679825438>", "Belial": "<:Belial:1438571491858845767>", "Avatar Belial": "<:AvatarBelial:1438910182825525368>", "Anila": "<:Anila:1438571479741632522>", "Siegfried": "<:Siegfried:1438571541833973831>", "Grimnir": "<:Grimnir:1438571508195790959>", "Nier": "<:Nier:1438571530157293710>", "Lucilius": "<:Lucilius:1438571519419748528>", "2B": "<:2B:1438571398682513529>", "Vane": "<:Vane:1438571462351917197>", "Beatrix": "<:Beatrix:1438571485588357140>", "Versusia": "<:Versusia:1438571466051555378>", "Vikala": "<:Vikala:1438571468060622909>", "Sandalphon": "<:Sandalphon:1438571947628822538>", "Galleon": "<:Galleon:1438571953245126676>", "Wilnas": "<:Wilnas:1438571471671787520>", "Meg": "<:Meg:1438571524180414516>"}
+    emoji_mapping = {"Gran": "<:Gran:1438571506681647235>", "Djeeta": "<:Djeeta:1438571497429012662>", "Katalina": "<:Katalina:1438571940683059331>", "Charlotta": "<:Charlotta:1438571495444975678>", "Lancelot": "<:Lancelot:1438571515275645149>", "Percival": "<:Percival:1438571533768327280>", "Ladiva": "<:Ladiva:1438571512142499930>", "Metera": "<:Metera:1438571526126567554>", "Lowain": "<:Lowain:1438571942989791313>", "Ferry": "<:Ferry:1438571501594083439>", "Zeta": "<:Zeta:1438571475958501406>", "Vaseraga": "<:Vaseraga:1438571464038154280>", "Narmaya": "<:Narmaya:1438571944579694765>", "Soriz": "<:Soriz:1438571459533340764>", "Zooey": "<:Zooey:1438571477971763262>", "Cagliostro": "<:Cagliostro:1438571948996038768>", "Yuel": "<:Yuel:1438571474104352860>", "Anre": "<:Anre:1438571481586995301>", "Eustace": "<:Eustace:1438571950828949666>", "Seox": "<:Seox:1438571538919198790>", "Vira": "<:Vira:1438571469792612393>", "Beelzebub": "<:Beelzebub:1438571488679825438>", "Belial": "<:Belial:1438571491858845767>", "Avatar Belial": "<:AvatarBelial:1438910182825525368>", "Anila": "<:Anila:1438571479741632522>", "Siegfried": "<:Siegfried:1438571541833973831>", "Grimnir": "<:Grimnir:1438571508195790959>", "Nier": "<:Nier:1438571530157293710>", "Lucilius": "<:Lucilius:1438571519419748528>", "2B": "<:2B:1438571398682513529>", "Vane": "<:Vane:1438571462351917197>", "Beatrix": "<:Beatrix:1438571485588357140>", "Versusia": "<:Versusia:1438571466051555378>", "Vikala": "<:Vikala:1438571468060622909>", "Sandalphon": "<:Sandalphon:1438571947628822538>", "Galleon": "<:Galleon:1438571953245126676>", "Wilnas": "<:Wilnas:1438571471671787520>", "Meg": "<:Meg:1438571524180414516>", "Lunalu": "<:Lunalu:1439718838034759740>"}
 
     def __init__(self, bot, database, config_path):
         # Initialize the cog
@@ -37,7 +37,8 @@ class Danisen(commands.Cog):
         # Queue and matchmaking setup
         self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}
         self.matchmaking_queue = deque()
-        self.max_active_matches = 3
+        # self.max_active_matches = 3 # Disabled because of loading this from config below, if this is instantiated it overwrites it for some reason
+        
         self.cur_active_matches = 0
         self.recent_opponents_limit = 2
         self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
@@ -72,7 +73,7 @@ class Danisen(commands.Cog):
         self.point_rollover = config.get('point_rollover', True)
         self.queue_status = config.get('queue_status', True)
         self.recent_opponents_limit = config.get('recent_opponents_limit', 3)
-        self.max_active_matches = config.get('max_active_matches', 5)  # New parameter
+        self.max_active_matches = config.get('max_active_matches', 7)  # New parameter
         self.special_rank_up_rules = config.get('special_rank_up_rules', False)
 
     @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
@@ -103,8 +104,9 @@ class Danisen(commands.Cog):
 
     async def score_update(self, ctx, winner, loser):
         # Update scores for a match
-        winner_rank = [winner['dan'], winner['points']]
-        loser_rank = [loser['dan'], loser['points']]
+        # Format of [Dan, Points, Rankup?, PointDelta]
+        winner_rank = [winner['dan'], winner['points'], False, 0.0]
+        loser_rank = [loser['dan'], loser['points'], False, 0,0]
         rankdown = False
         rankup = False
 
@@ -113,23 +115,34 @@ class Danisen(commands.Cog):
 
         # Winning and Losing logic
         if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_2: # lower ranked player wins with 4 rank gap
-            winner_rank[1] += 1
-            loser_rank[1] -= 1
+            winner_rank[1] += 3.0
+            winner_rank[3] += 3.0
+            loser_rank[1] -= 1.0
+            loser_rank[3] -= 1.0
         elif loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_1: # lower ranked player wins with 2 rank gap
-            winner_rank[1] += 1
-            loser_rank[1] -= 1
+            winner_rank[1] += 2.0
+            winner_rank[3] += 2.0
+            loser_rank[1] -= 1.0
+            loser_rank[3] -= 1.0
         elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_2: # higher ranked player wins with 4 rank gap
             winner_rank[1] += 0.1
+            winner_rank[3] += 0.1
             loser_rank[1] -= 0.1
+            loser_rank[3] -= 0.1
         elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_1: # higher ranked player wins with 2 rank gap
             winner_rank[1] += 0.5
+            winner_rank[3] += 0.5
             loser_rank[1] -= 0.5
+            loser_rank[3] -= 0.5
         else:
-            winner_rank[1] += 1 
-            loser_rank[1] -= 1
+            winner_rank[1] += 1.0
+            winner_rank[3] += 1.0
+            loser_rank[1] -= 1.0
+            loser_rank[3] -= 1.0
 
         if loser_rank[0] == self.minimum_derank and loser_rank[1] < 0: # making sure loser can't go lower than minimum rank
             loser_rank[1] = 0.0
+            loser_rank[3] = 0.0
         
 
         # Rankup logic with special rules
@@ -146,6 +159,7 @@ class Danisen(commands.Cog):
             
             if can_rankup:
                 winner_rank[0] += 1
+                winner_rank[2] = True
                 winner_rank[1] = winner_rank[1] % rankup_points if self.point_rollover else 0.0
                 rankup = True
 
@@ -153,6 +167,7 @@ class Danisen(commands.Cog):
         if loser_rank[1] <= RANKDOWN_POINTS:
             loser_rank[0] -= 1
             loser_rank[1] = DEFAULT_POINTS
+            loser_rank[2] = True
             rankdown = True
 
         # Log new scores
@@ -467,8 +482,9 @@ class Danisen(commands.Cog):
         self.logger.debug(f"leave_queue for player {ctx.author.name} awaiting lock")
         async with self.queue_lock:
             self.logger.debug(f"leave_queue for player {ctx.author.name} acquired lock")
+            self.logger.debug(f"current mmq is {self.matchmaking_queue}")
             for member in self.matchmaking_queue:
-                self.logger.debug(f"Checking if player {member['player_name']} on character {member['character']} should leave queue.")
+                self.logger.debug(f"Checking if player {member} should leave queue.")
                 if member and (member['discord_id'] == discord_id) and (char is None or (char is not None and member['character'] == char)):
                     self.logger.debug(f"Player {member['player_name']} on character {member['character']} should leave queue.")
                     daniels.append(member)
@@ -722,12 +738,12 @@ class Danisen(commands.Cog):
         # Send a message in the #active-matches channel
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
         active_match_msg = None
-        # if channel:
-        #     active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['player_name']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['player_name']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
-        # else:
-        #     await ctx.respond(
-        #         f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
-        #     )
+        if channel:
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['player_name']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['player_name']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
+        else:
+            await ctx.respond(
+                f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
+            )
 
         # Create view for dropdown reporting
         view = MatchView(self, daniel1, daniel2, active_match_msg) # Report Match Dropdown
@@ -739,7 +755,7 @@ class Danisen(commands.Cog):
         if channel:
             webhook_msg = await channel.send(
                 content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1):.1f} points) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1):.1f} points) {self.emoji_mapping[daniel2['character']]}"
-                "\n\nAll sets are FT2, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
+                "\n\nAll sets are FT3, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
             )
             await webhook_msg.pin()
@@ -791,8 +807,8 @@ class Danisen(commands.Cog):
 
         await ctx.respond(
             f"### The match has been reported as {winner}'s victory over {loser}!\n"
-            f"{player1_name}'s {char1} is now Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points.\n"
-            f"{player2_name}'s {char2} is now Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points."
+            f"{player1_name}'s {char1}: Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points.\n"
+            f"{player2_name}'s {char2}: Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points."
         )
 
     #report match score for the queue
@@ -801,14 +817,22 @@ class Danisen(commands.Cog):
             winner_rank, loser_rank = await self.score_update(interaction, player1,player2)
             winner = player1['player_name']
             winner_char = player1['character']
+            winner_old_dan = player1['dan']
+            winner_old_points = player1['points']
             loser = player2['player_name']
             loser_char = player2['character']
+            loser_old_dan = player2['dan']
+            loser_old_points = player2['points']
         else:
             winner_rank, loser_rank = await self.score_update(interaction, player2,player1)
             winner = player2['player_name']
             winner_char = player2['character']
+            winner_old_dan = player2['dan']
+            winner_old_points = player2['points']
             loser = player1['player_name']
             loser_char = player1['character']
+            loser_old_dan = player1['dan']
+            loser_old_points = player1['points']
 
         view = RequeueView(self, player1, player2)
 
@@ -816,8 +840,8 @@ class Danisen(commands.Cog):
         if channel:
             await channel.send(
                 content=f"### The match has been reported as {winner}'s victory over {loser}!\n"
-                f"{winner}'s {winner_char} is now Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points.\n"
-                f"{loser}'s {loser_char} is now Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points.",
+                f"{winner}'s {winner_char} {emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){", Rank up!" if winner_rank[2] else ""})\n"
+                f"{loser}'s {loser_char} {emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** (-{loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})",
                 view=view
                 )
         else:
@@ -883,7 +907,7 @@ class Danisen(commands.Cog):
 
         leaderboard_pages = self.create_paginated_embeds("Top Danisen Characters", daniels, MAX_FIELDS_PER_EMBED)
         paginator = pages.Paginator(pages=leaderboard_pages)
-        await paginator.respond(ctx.interaction, ephemeral=False)
+        await paginator.respond(ctx.interaction, ephemeral=True)
 
     @discord.commands.slash_command(name="updatemaxmatches", description="[Admin Command] Update max matches for the queue system")
     @discord.commands.default_permissions(manage_messages=True)
