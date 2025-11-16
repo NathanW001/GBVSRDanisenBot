@@ -797,7 +797,7 @@ class Danisen(commands.Cog):
 
         self.logger.info(f"Reported match {player1_name} vs {player2_name} as {winner} win")
         if winner == "player1":
-            winner_rank, loser_rank = await self.score_update(interaction, player1,player2)
+            winner_rank, loser_rank = await self.score_update(ctx, player1,player2)
             winner = player1['player_name']
             winner_char = player1['character']
             winner_old_dan = player1['dan']
@@ -807,7 +807,7 @@ class Danisen(commands.Cog):
             loser_old_dan = player2['dan']
             loser_old_points = player2['points']
         else:
-            loser_rank, winner_rank = await self.score_update(ctx, player2, player1)
+            winner_rank, loser_rank = await self.score_update(ctx, player2, player1)
             winner = player2['player_name']
             winner_char = player2['character']
             winner_old_dan = player2['dan']
