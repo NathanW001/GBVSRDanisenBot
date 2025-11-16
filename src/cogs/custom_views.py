@@ -113,7 +113,7 @@ class MatchView(discord.ui.View):
 
 class RequeueView(discord.ui.View):
     def __init__(self, bot, p1, p2):
-        super().__init__(timeout=60.0, disable_on_timeout=True)
+        super().__init__(timeout=120.0, disable_on_timeout=True)
         self.bot = bot
         self.p1 = p1
         self.p2 = p2
