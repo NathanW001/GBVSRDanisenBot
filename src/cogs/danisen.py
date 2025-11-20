@@ -1444,7 +1444,8 @@ class Danisen(commands.Cog):
             await ctx.respond("The bot does not have the permissions to create invites")
             return
 
-        if self.get_players_highest_dan(ctx.author.name) >= self.minimum_invite_dan:
+        max_dan = self.get_players_highest_dan(ctx.author.name)
+        if max_dan and max_dan >= self.minimum_invite_dan:
             res = self.database_cur.execute(f"SELECT (UNIXEPOCH('now') - timestamp) AS timediff, UNIXEPOCH('now') AS timenow, invite_link FROM invites WHERE discord_id={ctx.author.id}").fetchone()
 
             if not res:
