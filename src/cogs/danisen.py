@@ -5,7 +5,7 @@ from cogs.custom_views import *
 import os
 from collections import deque
 from constants import *
-from random import shuffle
+from random import choice
 from datetime import datetime
 
 class Danisen(commands.Cog):
@@ -143,13 +143,13 @@ class Danisen(commands.Cog):
 
         # Winning and Losing logic
         if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_2: # lower ranked player wins with 4 rank gap
-            winner_rank[1] += 3.0
-            winner_rank[3] += 3.0
+            winner_rank[1] += 2.0
+            winner_rank[3] += 2.0
             loser_rank[1] -= 1.0
             loser_rank[3] -= 1.0
         elif loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_1: # lower ranked player wins with 2 rank gap
-            winner_rank[1] += 2.0
-            winner_rank[3] += 2.0
+            winner_rank[1] += 1.5
+            winner_rank[3] += 1.5
             loser_rank[1] -= 1.0
             loser_rank[3] -= 1.0
         elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_2: # higher ranked player wins with 4 rank gap
@@ -794,11 +794,30 @@ class Danisen(commands.Cog):
     async def create_match_interaction(self, ctx: discord.Interaction, daniel1, daniel2):
         self.cur_active_matches += 1
 
+        # Calucalte if a player can rank up or down from this match
+        rankup_potential = await self.check_rankup_potential(daniel1, daniel2)
+        self.logger.debug(f"Player rankup potential is {rankup_potential}")
+
+        promotion_alert = " :rotating_light: **PROMOTION MATCH** :rotating_light:"
+        demotion_alert = " :rotating_light: **IN DANGER OF DEMOTION** :rotating_light:"
+
+        p1_alert = promotion_alert if rankup_potential[0] == 1 else (demotion_alert if rankup_potential[0] == -1 else "")
+        p2_alert = promotion_alert if rankup_potential[1] == 1 else (demotion_alert if rankup_potential[1] == -1 else "")
+
+        self.logger.debug(f"p1_alert is {p1_alert}, p2_alert is {p2_alert}")
+
+        # Randomize room host, if applicable
+        room_keyword = (None, 0)
+        if daniel1['keyword'] and daniel2['keyword']:
+            room_keyword = choice(((daniel1['keyword'], 0), (daniel2['keyword'], 1)))
+        elif daniel1['keyword'] or daniel2['keyword']:
+            room_keyword = (daniel1['keyword'], 0) if daniel1['keyword'] else (daniel2['keyword'], 1)
+
         # Send a message in the #active-matches channel
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
         active_match_msg = None
         if channel:
-            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['nickname']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]}{p1_alert} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['nickname']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]}{p2_alert} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
         else:
             await ctx.respond(
                 f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
@@ -807,13 +826,14 @@ class Danisen(commands.Cog):
         # Create view for dropdown reporting
         view = MatchView(self, daniel1, daniel2, active_match_msg) # Report Match Dropdown
         id1 = f"<@{daniel1['discord_id']}>"
-        id2 = f"<@{daniel2['discord_id']}>"
+        id2 = f"<@{daniel2['discord_id']}>"        
 
         # Send the message with the view in the #dani-matches
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1):.1f} points) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1):.1f} points) {self.emoji_mapping[daniel2['character']]}"
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1):.1f} points) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1):.1f} points) {self.emoji_mapping[daniel2['character']]}" +\
+                (f"\n\nThe room host will be {[id1, id2][room_keyword[1]]}, pw `{room_keyword[0]}`." if room_keyword[0] else f"\n\nNeither player has a default room password set, please coordinate the room in <#1433545145554309233>") +\
                 "\n\nAll sets are FT3, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
             )
@@ -1253,7 +1273,7 @@ class Danisen(commands.Cog):
 
     @discord.commands.slash_command(name="setroompassword", description="Assign a default room password to your profile")
     async def set_room_password(self, ctx: discord.ApplicationContext, pw: discord.Option(str, name="password", required=True)):
-        if not pw.isalnum() or len(pw) > 20:
+        if not pw.isalnum() or len(pw) > 8:
             await ctx.respond(f"Invalid room password `{kw}`. Please assure the password is alphanumeric, is 8 or less characters, and has no spaces (so that it works in GBVSR).")
             return
         self.database_cur.execute(f"UPDATE users SET keyword = '{pw}' WHERE discord_id='{ctx.author.id}'")
@@ -1265,3 +1285,42 @@ class Danisen(commands.Cog):
         self.database_cur.execute(f"UPDATE users SET keyword = NULL WHERE discord_id='{ctx.author.id}'")
         self.database_con.commit()
         await ctx.respond(f"Default room password removed.")
+
+    async def check_rankup_potential(self, player1, player2):
+        # Determine rankup points based on rank type
+        rankup_points = RANKUP_POINTS_NORMAL # RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+
+        # The return array, index 0 is p1 index 1 is p2, value of 0 means nothing, 1 means rankup chance, -1 means rankdown chance
+        ret = [0, 0]
+
+        p1_current_points = player1['points']
+        p2_current_points = player2['points']
+
+        p1_point_potential = [1.0, -1.0] #default
+        p2_point_potential = [1.0, -1.0]
+
+        if player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_2: # player1 four or more above player2
+            p1_potential = [0.1, -1]
+            p2_potential = [2, -0.1]
+        elif player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_1: # player1 two or three above player2
+            p1_potential = [0.5, -1]
+            p2_potential = [1.5, -0.5]
+        elif player2['dan'] >= player1['dan']  + self.rank_gap_for_more_points_2: # player2 four or more above player1
+            p1_potential = [2, -0.1]
+            p2_potential = [0.1, -1]
+        elif player2['dan'] >= player1['dan'] + self.rank_gap_for_more_points_1: # player2 two or three above player1
+            p1_potential = [1.5, -0.1]
+            p2_potential = [0.1, -1]
+        
+
+        # Rankup logic with special rules and Rankdown logic
+        if p1_current_points + p1_point_potential[0] >= rankup_points and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
+            ret[0] = 1
+        elif p1_current_points + p1_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
+            ret[0] = -1
+        if p2_current_points + p2_point_potential[0] >= rankup_points and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
+            ret[1] = 1
+        elif p2_current_points + p2_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
+            ret[0] = -1
+
+        return ret 
