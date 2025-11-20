@@ -68,7 +68,7 @@ class Danisen(commands.Cog):
         # self.max_active_matches = 3 # Disabled because of loading this from config below, if this is instantiated it overwrites it for some reason
         
         self.cur_active_matches = 0
-        # self.recent_opponents_limit = 2
+        # self.recent_opponents_limit = 2 # Disabled for same reason above
         self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
         self.in_match = {}  # Format: discord_id: in_match
         self.matchmaking_coro = None  # Task created with asyncio to run start_matchmaking after a set delay
@@ -878,23 +878,34 @@ class Danisen(commands.Cog):
         if winner == "player1":
             winner_rank, loser_rank = await self.score_update(ctx, player1,player2)
             winner = player1['nickname']
+            winner_id = player1['discord_id']
             winner_char = player1['character']
             winner_old_dan = player1['dan']
             winner_old_points = player1['points']
             loser = player2['nickname']
+            loser_id = player2['discord_id']
             loser_char = player2['character']
             loser_old_dan = player2['dan']
             loser_old_points = player2['points']
         else:
             winner_rank, loser_rank = await self.score_update(ctx, player2, player1)
             winner = player2['nickname']
+            winner_id = player2['discord_id']
             winner_char = player2['character']
             winner_old_dan = player2['dan']
             winner_old_points = player2['points']
             loser = player1['nickname']
+            loser_id = player1['discord_id']
             loser_char = player1['character']
             loser_old_dan = player1['dan']
             loser_old_points = player1['points']
+
+        self.logger.info(f"Adding match of {player1['player_name']} vs {player2['player_name']} into matches table")
+        self.database_cur.execute(
+            "INSERT INTO matches (winner_discord_id, winner_character, loser_discord_id, loser_character) VALUES (?, ?, ?, ?)", 
+            (winner_id, winner_char, loser_id, loser_char)
+        )
+        self.database_con.commit()
 
         await ctx.respond(
             f"### The match has been reported as {winner}'s victory over {loser}!\n"
@@ -907,23 +918,34 @@ class Danisen(commands.Cog):
         if (winner == "player1") :
             winner_rank, loser_rank = await self.score_update(interaction, player1,player2)
             winner = player1['nickname']
+            winner_id = player1['discord_id']
             winner_char = player1['character']
             winner_old_dan = player1['dan']
             winner_old_points = player1['points']
             loser = player2['nickname']
+            loser_id = player2['discord_id']
             loser_char = player2['character']
             loser_old_dan = player2['dan']
             loser_old_points = player2['points']
         else:
             winner_rank, loser_rank = await self.score_update(interaction, player2,player1)
             winner = player2['nickname']
+            winner_id = player2['discord_id']
             winner_char = player2['character']
             winner_old_dan = player2['dan']
             winner_old_points = player2['points']
             loser = player1['nickname']
+            loser_id = player1['discord_id']
             loser_char = player1['character']
             loser_old_dan = player1['dan']
             loser_old_points = player1['points']
+
+        self.logger.info(f"Adding match of {player1['player_name']} vs {player2['player_name']} into matches table")
+        self.database_cur.execute(
+            "INSERT INTO matches (winner_discord_id, winner_character, loser_discord_id, loser_character) VALUES (?, ?, ?, ?)", 
+            (winner_id, winner_char, loser_id, loser_char)
+        )
+        self.database_con.commit()
 
         view = RequeueView(self, player1, player2)
 
@@ -1159,6 +1181,8 @@ class Danisen(commands.Cog):
                       discord_name: discord.Option(str, name="discordname", autocomplete=player_autocomplete, required=False, default=None)):
         """Lists all registered characters for a player along with their ranks and points."""
         # Determine the target player
+        # await ctx.response.defer()
+
         if discord_name:
             members = ctx.guild.members
             member = next((m for m in members if discord_name.lower() == m.name.lower()), None)
@@ -1192,6 +1216,20 @@ class Danisen(commands.Cog):
         )
         if member.avatar:
             em.set_thumbnail(url=member.avatar.url)
+
+        em.add_field(
+            name=f"Player Information:",
+            value=f"",
+            inline=False
+        )
+
+        winrate_info = await self.get_winrate_by_id(user_res['discord_id'])
+
+        em.add_field(
+            name=f"Set Winrate:",
+            value=f"{winrate_info[0]:.2f}%, ({winrate_info[1]}W, {winrate_info[2]}L)",
+            inline=False
+        )
 
         if user_res["keyword"]:
             em.add_field(
@@ -1324,3 +1362,67 @@ class Danisen(commands.Cog):
             ret[0] = -1
 
         return ret 
+
+    # Returns in format (percentage, wins, losses)
+    async def get_winrate_by_id(self, discord_id: int):
+        winning_sets = 0
+        losing_sets = 0
+
+        res = self.database_cur.execute(f"SELECT COUNT(*) AS wins FROM matches WHERE winner_discord_id={discord_id}").fetchone()
+        if res:
+            winning_sets = res['wins']
+
+        res = self.database_cur.execute(f"SELECT COUNT(*) AS losses FROM matches WHERE loser_discord_id={discord_id}").fetchone()
+        if res:
+            losing_sets = res['losses']
+
+        if winning_sets == 0 and losing_sets == 0:
+            return (0,0,0)
+        else:
+            return (100 * (winning_sets / (winning_sets + losing_sets)), winning_sets, losing_sets)
+
+
+    async def get_total_matches_by_id(self, discord_id: int):
+        total_sets = 0
+        res = self.database_cur.execute(f"SELECT COUNT(*) AS sets FROM matches WHERE winner_discord_id={discord_id} OR loser_discord_id={discord_id}").fetchone()
+        if res:
+            total_sets = res['sets']
+        
+        return total_sets
+
+    
+    @discord.commands.slash_command(name="removelastmatchinstance", description="[Admin Command] Remove the last match instance of p1 vs p2, no ordering")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def remove_last_match_instance(self, ctx: discord.ApplicationContext,
+                                               player1: discord.Option(str, name="player1", required=True, autocomplete=player_autocomplete),
+                                               player2: discord.Option(str, name="player2", required=True, autocomplete=player_autocomplete)):
+        p1_id = 0
+        p2_id = 0
+
+        self.logger.debug(f"Attempting to find match to remove between {player1}" and {player2})
+        res = self.database_cur.execute(f"SELECT discord_id FROM users WHERE player_name='{player1}'").fetchone()
+        if res:
+            p1_id = res['discord_id']
+        else:
+            await ctx.respond(f"Player 1 ({player1}) is not registered to the Danisen database.")
+            return
+
+        res = self.database_cur.execute(f"SELECT discord_id FROM users WHERE player_name='{player2}'").fetchone()
+        if res:
+            p2_id = res['discord_id']
+        else:
+            await ctx.respond(f"Player 2 ({player2}) is not registered to the Danisen database.")
+            return
+
+        res = self.database_cur.execute(f"SELECT MAX(id) AS id FROM matches WHERE (winner_discord_id={p1_id} AND loser_discord_id={p2_id}) OR (winner_discord_id={p2_id} AND loser_discord_id={p1_id})").fetchone()
+        if res and res['id']:
+            self.logger.debug(f"Match between players found, removing from db")
+            self.database_cur.execute(f"DELETE FROM matches WHERE id={res['id']}")
+            self.database_con.commit()
+            await ctx.respond(f"Latest match successfully removed (id = {res['id']})")
+            return
+        else:
+            await ctx.respond(f"No match found between")
+            return
+
+    
