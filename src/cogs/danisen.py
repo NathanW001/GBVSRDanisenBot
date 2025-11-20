@@ -1,4 +1,4 @@
-import discord, sqlite3, asyncio, json, logging
+import discord, sqlite3, asyncio, json, logging, re
 from discord.ext import commands, pages
 from cogs.database import *
 from cogs.custom_views import *
@@ -32,7 +32,35 @@ class Danisen(commands.Cog):
         self.database_con = database
         self.database_con.row_factory = sqlite3.Row
         self.database_cur = self.database_con.cursor()
-        self.database_cur.execute("CREATE TABLE IF NOT EXISTS players(discord_id, player_name, character, dan, points, PRIMARY KEY (discord_id, character))")
+
+        # Table for a discord user and profile config
+        self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS users("
+                                                                    f"discord_id INT PRIMARY KEY,"
+                                                                    f"player_name TEXT NOT NULL,"
+                                                                    f"nickname TEXT,"
+                                                                    f"keyword TEXT"
+                                                                    f")")
+
+        # Table for characters registered by a discord user
+        self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS players("
+                                                                    f"discord_id INT NOT NULL,"
+                                                                    f"character TEXT NOT NULL,"
+                                                                    f"dan INT NOT NULL,"
+                                                                    f"points FLOAT NOT NULL,"
+                                                                    f"FOREIGN KEY (discord_id) REFERENCES users ON UPDATE CASCADE ON DELETE CASCADE,"
+                                                                    f"PRIMARY KEY (discord_id, character)"
+                                                                    f")")
+
+        # Table for match history
+        self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS matches("
+                                                                    f"id INTEGER PRIMARY KEY,"
+                                                                    f"winner_discord_id INT,"
+                                                                    f"winner_character TEXT,"
+                                                                    f"loser_discord_id INT,"
+                                                                    f"loser_character TEXT,"
+                                                                    f"FOREIGN KEY (winner_discord_id, winner_character) REFERENCES players(discord_id, character) ON UPDATE CASCADE ON DELETE SET NULL,"
+                                                                    f"FOREIGN KEY (loser_discord_id, loser_character) REFERENCES players(discord_id, character) ON UPDATE CASCADE ON DELETE SET NULL"
+                                                                    f")")
 
         # Queue and matchmaking setup
         self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}
@@ -40,7 +68,7 @@ class Danisen(commands.Cog):
         # self.max_active_matches = 3 # Disabled because of loading this from config below, if this is instantiated it overwrites it for some reason
         
         self.cur_active_matches = 0
-        self.recent_opponents_limit = 2
+        # self.recent_opponents_limit = 2
         self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
         self.in_match = {}  # Format: discord_id: in_match
         self.matchmaking_coro = None  # Task created with asyncio to run start_matchmaking after a set delay
@@ -176,14 +204,14 @@ class Danisen(commands.Cog):
         self.logger.info(f"Loser : {loser['player_name']} dan {loser_rank[0]}, points {loser_rank[1]}")
 
         # Update database
-        self.database_cur.execute(f"UPDATE players SET dan = {winner_rank[0]}, points = {winner_rank[1]} WHERE player_name='{winner['player_name']}' AND character='{winner['character']}'")
-        self.database_cur.execute(f"UPDATE players SET dan = {loser_rank[0]}, points = {loser_rank[1]} WHERE player_name='{loser['player_name']}' AND character='{loser['character']}'")
+        self.database_cur.execute(f"UPDATE players SET dan = {winner_rank[0]}, points = {winner_rank[1]} WHERE discord_id='{winner['discord_id']}' AND character='{winner['character']}'")
+        self.database_cur.execute(f"UPDATE players SET dan = {loser_rank[0]}, points = {loser_rank[1]} WHERE discord_id='{loser['discord_id']}' AND character='{loser['character']}'")
         self.database_con.commit()
 
         # Update roles on rankup/down
         if rankup:
             self.logger.debug(f"Winning player ranked up, attempting to assign roles")
-            dan = self.get_players_highest_dan(ctx, winner['player_name'])
+            dan = self.get_players_highest_dan(winner['player_name'])
             self.logger.debug(f"Winning player's highest character dan is {dan}, rankup dan is {winner_rank[0]}")
             if dan and dan == winner_rank[0]: # it's their highest ranked character that just ranked up, since the table is updated first we check for equality
                 role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0]}")
@@ -197,7 +225,7 @@ class Danisen(commands.Cog):
 
         if rankdown:
             self.logger.debug(f"Losing player ranked down, attempting to assign roles")
-            dan = self.get_players_highest_dan(ctx, loser['player_name'])
+            dan = self.get_players_highest_dan(loser['player_name'])
             self.logger.debug(f"Winning player's highest character dan is {dan}, rankdown dan is {loser_rank[0]}")
             if dan and dan == loser_rank[0]: # same as above, hopefully
                 role = discord.utils.get(ctx.guild.roles, name=f"Dan {loser_rank[0]}")
@@ -219,7 +247,7 @@ class Danisen(commands.Cog):
         return [character for character in self.characters if character.lower().startswith(ctx.value.lower())]
 
     async def player_autocomplete(self, ctx: discord.AutocompleteContext):
-        res = self.database_cur.execute(f"SELECT player_name FROM players")
+        res = self.database_cur.execute(f"SELECT player_name FROM users")
         name_list=res.fetchall()
         names = set([name[0] for name in name_list])
         return [name for name in names if (name.lower()).startswith(ctx.value.lower())]
@@ -237,10 +265,12 @@ class Danisen(commands.Cog):
 
         # sync role stuff
         role_removed = False
-        res = self.database_cur.execute(f"SELECT dan, discord_id FROM players WHERE player_name='{player_name}' AND character='{char}'").fetchone()
+        discord_id = None
+        res = self.database_cur.execute(f"SELECT dan, users.discord_id AS discord_id FROM users JOIN players ON players.discord_id = users.discord_id WHERE player_name='{player_name}' AND character='{char}'").fetchone()
         if res: 
-            if res['dan'] == self.get_players_highest_dan(ctx, player_name) or dan > self.get_players_highest_dan(ctx, player_name): # if this is the player's highest ranked character being updated, we need to remove the corresponding dan role
-                role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx, player_name)}")
+            discord_id = res['discord_id']
+            if res['dan'] == self.get_players_highest_dan(player_name) or dan > self.get_players_highest_dan(player_name): # if this is the player's highest ranked character being updated, we need to remove the corresponding dan role
+                role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(player_name)}")
                 member = ctx.guild.get_member(res['discord_id'])
                 bot_member = ctx.guild.get_member(self.bot.user.id)
                 if role and self.can_manage_role(bot_member, role):
@@ -249,11 +279,11 @@ class Danisen(commands.Cog):
         else:
             await ctx.respond(f"Database entry for player {player} on character {char} not found.")
         
-        self.database_cur.execute(f"UPDATE players SET dan = {dan}, points = {points} WHERE player_name='{player_name}' AND character='{char}'")
+        self.database_cur.execute(f"UPDATE players SET dan = {dan}, points = {points} WHERE discord_id='{discord_id}' AND character='{char}'")
         self.database_con.commit()
 
-        if role_removed and self.get_players_highest_dan(ctx, player_name) is not None:
-            role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx, player_name)}")
+        if role_removed and self.get_players_highest_dan(player_name) is not None:
+            role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(player_name)}")
             member = ctx.guild.get_member(res['discord_id'])
             bot_member = ctx.guild.get_member(self.bot.user.id)
             if role and self.can_manage_role(bot_member, role):
@@ -290,8 +320,11 @@ class Danisen(commands.Cog):
     async def register(self, ctx: discord.ApplicationContext,
                        char1: discord.Option(str, name="character", autocomplete=character_autocomplete)):
         player_name = ctx.author.name
-        player_nickname = ctx.author.nick if ctx.author.nick != None else ctx.author.global_name if ctx.author.global_name != None else ctx.author.name
         player_discord_id = ctx.author.id
+        player_nickname = ctx.author.global_name if ctx.author.global_name else ctx.author.name
+
+        player_nickname = re.subn(r"(?P<char>[\*\-\_\~])", r"\\\g<char>", player_nickname)[0]
+        self.logger.debug(f"player nickname post regex is {player_nickname}")
 
         self.logger.info(f"player nickname is {ctx.author.nick}, player global name is {ctx.author.global_name}")
 
@@ -324,10 +357,27 @@ class Danisen(commands.Cog):
                 await ctx.respond(f"You are already registered with 3 characters. Please unregister one of your characters before registering a new character.")
                 return        
 
+        # If user is not in the users table, insert them into that table first
+        res = self.database_cur.execute(
+            "SELECT * FROM users WHERE discord_id = ?",
+            (player_discord_id,)
+        ).fetchone()
+
+        if res:
+            self.logger.debug(f"User {player_name} already exists in users table")
+        else:
+            self.logger.info(f"Adding user {player_name} into users table")
+            self.database_cur.execute(
+                "INSERT INTO users (discord_id, player_name, nickname, keyword) VALUES (?, ?, ?, ?)", 
+                (player_discord_id, player_name, player_nickname, None)
+            )
+            self.database_con.commit()
+
+
         # Insert the new player record
-        line = (ctx.author.id, player_name, char1, DEFAULT_DAN, DEFAULT_POINTS)
+        line = (ctx.author.id, char1, DEFAULT_DAN, DEFAULT_POINTS)
         self.database_cur.execute(
-            "INSERT INTO players (discord_id, player_name, character, dan, points) VALUES (?, ?, ?, ?, ?)", 
+            "INSERT INTO players (discord_id, character, dan, points) VALUES (?, ?, ?, ?)", 
             line
         )
         self.database_con.commit()
@@ -339,7 +389,7 @@ class Danisen(commands.Cog):
             role_list.append(char_role)
         self.logger.info(f"Adding to db {player_name} {char1}")
 
-        highest_dan = self.get_players_highest_dan(ctx, player_name)
+        highest_dan = self.get_players_highest_dan(player_name)
         self.logger.info(f"Registering player's highest dan is {highest_dan}")
         if not highest_dan or highest_dan == 1:
             dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
@@ -359,12 +409,12 @@ class Danisen(commands.Cog):
 
         if regged_chars > 0:
             await ctx.respond(
-                f"You are now registered as {player_nickname} ({player_name}) with {char1}!\n"
+                f"You are now registered as {player_name}{" " + player_nickname if player_nickname else ""} with {char1}!\n"
                 f"You have registered {regged_chars+1}/3 characters to the Danisen. Have fun!"
             )
         else:
             await ctx.respond(
-                f"You are now registered as {player_nickname} ({player_name}) with {char1}!\n"
+                f"You are now registered as {player_name}{" " + player_nickname if player_nickname else ""} with {char1}!\n"
                 "If you wish to add more characters, you can register with up to 3 different characters!\n\n"
                 "Welcome to the Danisen!"
             )
@@ -428,8 +478,8 @@ class Danisen(commands.Cog):
                 message_text += f"Could not remove roles due to bot's role being too low\n\n"
                 self.logger.warning(f"Could not remove roles due to bot's role being too low")
         
-        if self.get_players_highest_dan(ctx, ctx.author.name):
-            role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx, ctx.author.name)}")
+        if self.get_players_highest_dan(ctx.author.name):
+            role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx.author.name)}")
             member = ctx.author
             bot_member = ctx.guild.get_member(self.bot.user.id)
             if role and self.can_manage_role(bot_member, role):
@@ -464,7 +514,7 @@ class Danisen(commands.Cog):
             member = ctx.author
         id = member.id
 
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={id} AND character='{char}'")
+        res = self.database_cur.execute(f"SELECT dan, points, nickname FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={id} AND character='{char}'")
         data = res.fetchone()
         if data:
             await ctx.respond(f"""{data['player_name']}'s rank for {char} is Dan {data['dan']}, {round(data['points'], 1):.1f} points""")
@@ -526,14 +576,23 @@ class Danisen(commands.Cog):
             return
 
         #Check if valid character
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={discord_id} AND character='{char}'")
+        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, dan, points FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={discord_id} AND character='{char}'")
         daniel = res.fetchone()
         if daniel == None:
             await ctx.respond(f"You are not registered with that character")
             return
 
+
+        # Update player nickname, could be refactored to another function but idk where else to put it
+        player_nickname = ctx.author.global_name if ctx.author.global_name else ctx.author.name
+        player_nickname = re.subn(r"(?P<char>[\*\-\_\~])", r"\\\g<char>", player_nickname)[0]
+        self.logger.debug(f"player nickname post regex is {player_nickname}")
+        if player_nickname != daniel['nickname']:
+            self.database_cur.execute(f"UPDATE users SET nickname = '{player_nickname}' WHERE discord_id='{ctx.author.id}'")
+
         daniel = DanisenRow(daniel)
         daniel['requeue'] = rejoin_queue
+        daniel['nickname'] = player_nickname
 
         self.logger.debug(f"join_queue for player {daniel['player_name']} awaiting lock")
         queue_add_success = False
@@ -573,7 +632,7 @@ class Danisen(commands.Cog):
         if self.queue_status == False:
             return
 
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND character='{player['character']}'")
+        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, dan, points FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={player['discord_id']} AND character='{player['character']}'")
         db_player = res.fetchone()
         if not db_player:
             return  # Exit if the player is not found in the database
@@ -603,7 +662,7 @@ class Danisen(commands.Cog):
         self.logger.debug(f"current queue is {self.matchmaking_queue}")
         for player in self.matchmaking_queue:
             if player:
-                em.add_field(name=f"{player['player_name']} ({player['character']})", 
+                em.add_field(name=f"{player['nickname']} ({player['character']})", 
                         value=f"Dan {player['dan']}, {round(player['points'], 1):.1f} points", 
                         inline=False) 
         
@@ -739,7 +798,7 @@ class Danisen(commands.Cog):
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
         active_match_msg = None
         if channel:
-            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['player_name']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['player_name']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['nickname']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
         else:
             await ctx.respond(
                 f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
@@ -798,21 +857,21 @@ class Danisen(commands.Cog):
         self.logger.info(f"Reported match {player1_name} vs {player2_name} as {winner} win")
         if winner == "player1":
             winner_rank, loser_rank = await self.score_update(ctx, player1,player2)
-            winner = player1['player_name']
+            winner = player1['nickname']
             winner_char = player1['character']
             winner_old_dan = player1['dan']
             winner_old_points = player1['points']
-            loser = player2['player_name']
+            loser = player2['nickname']
             loser_char = player2['character']
             loser_old_dan = player2['dan']
             loser_old_points = player2['points']
         else:
             winner_rank, loser_rank = await self.score_update(ctx, player2, player1)
-            winner = player2['player_name']
+            winner = player2['nickname']
             winner_char = player2['character']
             winner_old_dan = player2['dan']
             winner_old_points = player2['points']
-            loser = player1['player_name']
+            loser = player1['nickname']
             loser_char = player1['character']
             loser_old_dan = player1['dan']
             loser_old_points = player1['points']
@@ -827,21 +886,21 @@ class Danisen(commands.Cog):
     async def report_match_queue(self, interaction: discord.Interaction, player1, player2, winner):
         if (winner == "player1") :
             winner_rank, loser_rank = await self.score_update(interaction, player1,player2)
-            winner = player1['player_name']
+            winner = player1['nickname']
             winner_char = player1['character']
             winner_old_dan = player1['dan']
             winner_old_points = player1['points']
-            loser = player2['player_name']
+            loser = player2['nickname']
             loser_char = player2['character']
             loser_old_dan = player2['dan']
             loser_old_points = player2['points']
         else:
             winner_rank, loser_rank = await self.score_update(interaction, player2,player1)
-            winner = player2['player_name']
+            winner = player2['nickname']
             winner_char = player2['character']
             winner_old_dan = player2['dan']
             winner_old_points = player2['points']
-            loser = player1['player_name']
+            loser = player1['nickname']
             loser_char = player1['character']
             loser_old_dan = player1['dan']
             loser_old_points = player1['points']
@@ -913,8 +972,8 @@ class Danisen(commands.Cog):
     @discord.commands.slash_command(description="See the top players")
     async def leaderboard(self, ctx: discord.ApplicationContext):
         daniels = self.database_cur.execute(
-            "SELECT player_name || '''s ' || character AS name, 'Dan ' || dan || ', ' || ROUND(points, 1) || ' points' AS value "
-            "FROM players ORDER BY dan DESC, points DESC"
+            "SELECT nickname || '''s ' || character AS name, 'Dan ' || dan || ', ' || ROUND(points, 1) || ' points' AS value "
+            "FROM players JOIN users ON players.discord_id = users.discord_id ORDER BY dan DESC, points DESC"
         ).fetchall()
 
         leaderboard_pages = self.create_paginated_embeds("Top Danisen Characters", daniels, MAX_FIELDS_PER_EMBED)
@@ -1063,14 +1122,14 @@ class Danisen(commands.Cog):
 
     def get_player(self, player_name, character):
         res = self.database_cur.execute(
-            "SELECT * FROM players WHERE player_name=? AND character=?", 
+            "SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, dan, points FROM players JOIN users ON players.discord_id = users.discord_id WHERE player_name=? AND character=?", 
             (player_name, character)
         )
         return res.fetchone()
 
     def get_players_by_dan(self, dan):
         res = self.database_cur.execute(
-            "SELECT * FROM players WHERE dan=?", 
+            "SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, dan, points FROM players JOIN users ON players.discord_id = users.discord_id WHERE dan=?", 
             (dan,)
         )
         return res.fetchall()
@@ -1099,14 +1158,39 @@ class Danisen(commands.Cog):
             await ctx.respond(f"{member.name} has no registered characters.")
             return
 
+        user_res = self.database_cur.execute( # implicitly required to exist based on registered characters
+            "SELECT * FROM users WHERE discord_id = ?",
+            (member.id,)
+        ).fetchone()
+
+        player_highest_dan = self.get_players_highest_dan(member.name)
+
         # Create an embed to display the profile
         em = discord.Embed(
-            title=f"{member.name}'s Profile",
-            description="List of registered characters and their ranks",
-            color=discord.Color.blurple()
+            title=f"{user_res['nickname']}'s Profile",
+            color=self.dan_colours[player_highest_dan-1]
         )
         if member.avatar:
             em.set_thumbnail(url=member.avatar.url)
+
+        if user_res["keyword"]:
+            em.add_field(
+                name=f"Room Password:",
+                value=f"`{user_res["keyword"]}`",
+                inline=True
+            )
+        else:
+            em.add_field(
+                name=f"Room Password:",
+                value=f"None (set one with /setroompassword)",
+                inline=True
+            )
+
+        em.add_field(
+            name=f"Characters:",
+            value=f"",
+            inline=False
+        )
 
         for row in res:
             em.add_field(
@@ -1119,9 +1203,8 @@ class Danisen(commands.Cog):
 
     # Helper function
     # Returns the highest Dan rank on any character registered by this player. If the player has no characters registered, return None
-    def get_players_highest_dan(self, ctx: discord.ApplicationContext,
-                                            player_name: str):
-        res = self.database_cur.execute(f"SELECT MAX(dan) as max_dan FROM players WHERE player_name='{player_name}'").fetchone()
+    def get_players_highest_dan(self, player_name: str):
+        res = self.database_cur.execute(f"SELECT MAX(dan) as max_dan FROM players JOIN users ON players.discord_id = users.discord_id WHERE player_name='{player_name}'").fetchone()
         if res:
             return res['max_dan']
         else:
@@ -1167,3 +1250,18 @@ class Danisen(commands.Cog):
                 await self.matchmake(interaction)
 
         self.logger.debug(f"Not restarting timer, no players in queue")
+
+    @discord.commands.slash_command(name="setroompassword", description="Assign a default room password to your profile")
+    async def set_room_password(self, ctx: discord.ApplicationContext, pw: discord.Option(str, name="password", required=True)):
+        if not pw.isalnum() or len(pw) > 20:
+            await ctx.respond(f"Invalid room password `{kw}`. Please assure the password is alphanumeric, is 8 or less characters, and has no spaces (so that it works in GBVSR).")
+            return
+        self.database_cur.execute(f"UPDATE users SET keyword = '{pw}' WHERE discord_id='{ctx.author.id}'")
+        self.database_con.commit()
+        await ctx.respond(f"Default room password updated.")
+
+    @discord.commands.slash_command(name="removeroompassword", description="Remove the room password from your profile, if one is assigned")
+    async def remove_room_password(self, ctx: discord.ApplicationContext):
+        self.database_cur.execute(f"UPDATE users SET keyword = NULL WHERE discord_id='{ctx.author.id}'")
+        self.database_con.commit()
+        await ctx.respond(f"Default room password removed.")
