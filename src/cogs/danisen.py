@@ -828,7 +828,7 @@ class Danisen(commands.Cog):
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
         active_match_msg = None
         if channel:
-            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]}{p1_alert} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['nickname']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]}{p2_alert} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points)")
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]}{p1_alert} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['nickname']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]}{p2_alert} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points).{" Room pw is `" + room_keyword[0] + "`." if room_keyword[0] else ""}")
         else:
             await ctx.respond(
                 f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
