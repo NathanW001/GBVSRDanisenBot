@@ -18,6 +18,7 @@ DEFAULT_CONFIG = {
     "ACTIVE_MATCHES_CHANNEL_ID": "0",
     "REPORTED_MATCHES_CHANNEL_ID": "0",
     "ONGOING_MATCHES_CHANNEL_ID": "0",
+    "WELCOME_CHANNEL_ID": "0",
     "total_dans": 12,
     "minimum_derank": 1,
     "maximum_rank_difference": 1,
@@ -27,7 +28,8 @@ DEFAULT_CONFIG = {
     "point_rollover": True,
     "queue_status": True,
     "special_rank_up_rules": False,
-    "max_active_matches": 5
+    "max_active_matches": 5,
+    "minimum_invite_dan": 4
 }
 # Logging colors
 LOG_COLORS = {

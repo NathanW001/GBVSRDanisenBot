@@ -7,6 +7,7 @@ from collections import deque
 from constants import *
 from random import choice
 from datetime import datetime
+from time import time
 
 class Danisen(commands.Cog):
     # Predefined characters and players
@@ -62,6 +63,14 @@ class Danisen(commands.Cog):
                                                                     f"FOREIGN KEY (loser_discord_id, loser_character) REFERENCES players(discord_id, character) ON UPDATE CASCADE ON DELETE SET NULL"
                                                                     f")")
 
+        self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS invites("
+                                                                    f"discord_id INT NOT NULL,"
+                                                                    f"invite_link TEXT,"
+                                                                    f"timestamp INTEGER," # uses unix time
+                                                                    f"FOREIGN KEY (discord_id) REFERENCES users (discord_id) ON UPDATE CASCADE ON DELETE CASCADE,"
+                                                                    f"PRIMARY KEY (discord_id)"
+                                                                    f")")
+
         # Queue and matchmaking setup
         self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}
         self.matchmaking_queue = deque()
@@ -94,6 +103,7 @@ class Danisen(commands.Cog):
         self.ACTIVE_MATCHES_CHANNEL_ID = int(config.get('ACTIVE_MATCHES_CHANNEL_ID', 0))
         self.REPORTED_MATCHES_CHANNEL_ID = int(config.get('REPORTED_MATCHES_CHANNEL_ID', 0))
         self.ONGOING_MATCHES_CHANNEL_ID = int(config.get('ONGOING_MATCHES_CHANNEL_ID', 0))
+        self.WELCOME_CHANNEL_ID = int(config.get('WELCOME_CHANNEL_ID', 0))
         self.total_dans = config.get('total_dans', MAX_DAN_RANK)
         self.minimum_derank = config.get('minimum_derank', DEFAULT_DAN)
         self.rank_gap_for_more_points_1 = config.get('rank_gap_for_more_points_1', 2)
@@ -103,6 +113,7 @@ class Danisen(commands.Cog):
         self.recent_opponents_limit = config.get('recent_opponents_limit', 3)
         self.max_active_matches = config.get('max_active_matches', 7)  # New parameter
         self.special_rank_up_rules = config.get('special_rank_up_rules', False)
+        self.minimum_invite_dan = config.get('minimum_invite_dan', 4)
 
     @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
     @discord.commands.default_permissions(manage_roles=True)
@@ -1424,5 +1435,44 @@ class Danisen(commands.Cog):
         else:
             await ctx.respond(f"No match found between")
             return
+
+    # Generates an invite link to the 
+    @discord.commands.slash_command(name="getinvite", description=f"Get a 1 use invite link once a week, usable only by higher dans")
+    async def get_invite_link(self, ctx: discord.ApplicationContext):
+        bot_member = ctx.guild.get_member(self.bot.user.id)
+        if not bot_member.guild_permissions.create_instant_invite:
+            await ctx.respond("The bot does not have the permissions to create invites")
+            return
+
+        if self.get_players_highest_dan(ctx.author.name) >= self.minimum_invite_dan:
+            res = self.database_cur.execute(f"SELECT (UNIXEPOCH('now') - timestamp) AS timediff, UNIXEPOCH('now') AS timenow, invite_link FROM invites WHERE discord_id={ctx.author.id}").fetchone()
+
+            if not res:
+                self.logger.debug(f"User {ctx.author.name} not in invites table, generating link and adding")
+                welcome_channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
+                created_invite = await welcome_channel.create_invite(max_age=604800, max_uses=1, unique=True, reason=f"Created by user {ctx.author.name} with /getinvite")
+                self.database_cur.execute(f"INSERT INTO invites (discord_id, invite_link, timestamp) VALUES (?, ?, UNIXEPOCH('now'))", (ctx.author.id, created_invite.url))
+                self.database_con.commit()
+                await ctx.respond(f"New invite link generated: {created_invite.url}. You will be able to recieve another link <t:{int(time()) + 604800}:R>, the original link will also expire at that time. You can use this command at any time to check the generated link.", ephemeral=True)
+                return
+            elif (res and res['timediff'] >= 604800): 
+                self.logger.debug(f"User {ctx.author.name} found in invites table, generating link and updating.")
+                welcome_channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
+                created_invite = await welcome_channel.create_invite(max_age=604800, max_uses=1, unique=True, reason=f"Created by user {ctx.author.name} with /getinvite")
+                self.database_cur.execute(f"UPDATE invites SET invite_link='{created_invite.url}', timestamp=UNIXEPOCH('now') WHERE discord_id={ctx.author.id}")
+                self.database_con.commit()
+                await ctx.respond(f"New invite link generated: {created_invite.url}. You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>, the original link will also expire at that time. You can use this command at any time to check the generated link.", ephemeral=True)
+                return
+            elif res:
+                await ctx.respond(f"You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>. Your last invite link was: {res['invite_link']}.", ephemeral=True)
+                return
+        else:
+            await ctx.respond(f"This command is only available for players Dan {self.minimum_invite_dan} and above.", ephemeral=True)
+            return
+
+    
+
+
+
 
     
