@@ -19,6 +19,8 @@ class Danisen(commands.Cog):
         discord.Colour.from_rgb(252, 166, 220), discord.Colour.from_rgb(17, 20, 172), discord.Colour.from_rgb(240, 64, 48),
     ] 
     emoji_mapping = {"Gran": "<:Gran:1438571506681647235>", "Djeeta": "<:Djeeta:1438571497429012662>", "Katalina": "<:Katalina:1438571940683059331>", "Charlotta": "<:Charlotta:1438571495444975678>", "Lancelot": "<:Lancelot:1438571515275645149>", "Percival": "<:Percival:1438571533768327280>", "Ladiva": "<:Ladiva:1438571512142499930>", "Metera": "<:Metera:1438571526126567554>", "Lowain": "<:Lowain:1438571942989791313>", "Ferry": "<:Ferry:1438571501594083439>", "Zeta": "<:Zeta:1438571475958501406>", "Vaseraga": "<:Vaseraga:1438571464038154280>", "Narmaya": "<:Narmaya:1438571944579694765>", "Soriz": "<:Soriz:1438571459533340764>", "Zooey": "<:Zooey:1438571477971763262>", "Cagliostro": "<:Cagliostro:1438571948996038768>", "Yuel": "<:Yuel:1438571474104352860>", "Anre": "<:Anre:1438571481586995301>", "Eustace": "<:Eustace:1438571950828949666>", "Seox": "<:Seox:1438571538919198790>", "Vira": "<:Vira:1438571469792612393>", "Beelzebub": "<:Beelzebub:1438571488679825438>", "Belial": "<:Belial:1438571491858845767>", "Avatar Belial": "<:AvatarBelial:1438910182825525368>", "Anila": "<:Anila:1438571479741632522>", "Siegfried": "<:Siegfried:1438571541833973831>", "Grimnir": "<:Grimnir:1438571508195790959>", "Nier": "<:Nier:1438571530157293710>", "Lucilius": "<:Lucilius:1438571519419748528>", "2B": "<:2B:1438571398682513529>", "Vane": "<:Vane:1438571462351917197>", "Beatrix": "<:Beatrix:1438571485588357140>", "Versusia": "<:Versusia:1438571466051555378>", "Vikala": "<:Vikala:1438571468060622909>", "Sandalphon": "<:Sandalphon:1438571947628822538>", "Galleon": "<:Galleon:1438571953245126676>", "Wilnas": "<:Wilnas:1438571471671787520>", "Meg": "<:Meg:1438571524180414516>", "Lunalu": "<:Lunalu:1439718838034759740>"}
+    character_aliases = {"gran": "Gran", "djeeta": "Djeeta", "katalina": "Katalina", "kat": "Katalina", "charlotta": "Charlotta", "lotta": "Charlotta", "lancelot": "Lancelot", "lance": "Lancelot", "percival": "Percival", "perci": "Percival", "percy": "Percival", "ladiva": "Ladiva", "metera": "Metera", "lowain": "Lowain", "ferry": "Ferry", "zeta": "Zeta", "vaseraga": "Vaseraga", "vas": "Vaseraga", "narmaya": "Narmaya", "narm": "Narmaya", "soriz": "Soriz", "zooey": "Zooey", "cagliostro": "Cagliostro", "cag": "Cagliostro", "yuel": "Yuel", "anre": "Anre", "uno": "Anre", "eustace": "Eustace", "seox": "Seox", "six": "Seox", "vira": "Vira", "beelzebub": "Beelzebub", "bubs": "Beelzebub", "belial": "Belial", "bel": "Belial", "avatar belial": "Avatar Belial", "abel": "Avatar Belial", "anila": "Anila", "siegfried": "Siegfried", "sieg": "Siegfried", "grimnir": "Grimnir", "grim": "Grimnir", "nier": "Nier", "lucilius": "Lucilius", "luci": "Lucilius", "2b": "2B", "vane": "Vane", "beatrix": "Beatrix", "bea": "Beatrix", "versusia": "Versusia", "vikala": "Vikala", "sandalphon": "Sandalphon", "sandy": "Sandalphon", "galleon": "Galleon", "wilnas": "Wilnas", "meg": "Meg", "lunalu": "Lunalu"}
+
 
     def __init__(self, bot, database, config_path):
         # Initialize the cog
@@ -154,20 +156,20 @@ class Danisen(commands.Cog):
 
         # Winning and Losing logic
         if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_2: # lower ranked player wins with 4 rank gap
+            winner_rank[1] += 3.0
+            winner_rank[3] += 3.0
+            loser_rank[1] -= 1.0
+            loser_rank[3] -= 1.0
+        elif loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_1: # lower ranked player wins with 2 rank gap
             winner_rank[1] += 2.0
             winner_rank[3] += 2.0
             loser_rank[1] -= 1.0
             loser_rank[3] -= 1.0
-        elif loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_1: # lower ranked player wins with 2 rank gap
-            winner_rank[1] += 1.5
-            winner_rank[3] += 1.5
-            loser_rank[1] -= 1.0
-            loser_rank[3] -= 1.0
         elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_2: # higher ranked player wins with 4 rank gap
-            winner_rank[1] += 0.1
-            winner_rank[3] += 0.1
-            loser_rank[1] -= 0.1
-            loser_rank[3] -= 0.1
+            winner_rank[1] += 0.3
+            winner_rank[3] += 0.3
+            loser_rank[1] -= 0.3
+            loser_rank[3] -= 0.3
         elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_1: # higher ranked player wins with 2 rank gap
             winner_rank[1] += 0.5
             winner_rank[3] += 0.5
@@ -180,8 +182,9 @@ class Danisen(commands.Cog):
             loser_rank[3] -= 1.0
 
         if loser_rank[0] == self.minimum_derank and loser_rank[1] < 0: # making sure loser can't go lower than minimum rank
+            loser_rank[3] = round(0.0 - (loser_rank[1] - loser_rank[3]), 1)
             loser_rank[1] = 0.0
-            loser_rank[3] = 0.0
+            
         
 
         # Rankup logic with special rules
@@ -270,6 +273,8 @@ class Danisen(commands.Cog):
                         char : discord.Option(str, name="character", autocomplete=character_autocomplete),
                         dan :  discord.Option(int),
                         points : discord.Option(float)):
+
+        char = self.convert_character_alias(char)
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
             return
@@ -332,13 +337,14 @@ class Danisen(commands.Cog):
                        char1: discord.Option(str, name="character", autocomplete=character_autocomplete)):
         player_name = ctx.author.name
         player_discord_id = ctx.author.id
-        player_nickname = ctx.author.global_name if ctx.author.global_name else ctx.author.name
+        player_nickname = ctx.author.nick if ctx.author.nick else ctx.author.global_name if ctx.author.global_name else ctx.author.name
 
         player_nickname = re.subn(r"(?P<char>[\*\-\_\~])", r"\\\g<char>", player_nickname)[0]
         self.logger.debug(f"player nickname post regex is {player_nickname}")
 
         self.logger.info(f"player nickname is {ctx.author.nick}, player global name is {ctx.author.global_name}")
 
+        char1 = self.convert_character_alias(char1)
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
             return
@@ -434,6 +440,7 @@ class Danisen(commands.Cog):
     async def unregister(self, ctx : discord.ApplicationContext, 
                     char1 : discord.Option(str, name="character", autocomplete=character_autocomplete)):
 
+        char1 = self.convert_character_alias(char1)
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char selected {char1}. Please choose a valid char.")
             return
@@ -504,6 +511,8 @@ class Danisen(commands.Cog):
     async def rank(self, ctx : discord.ApplicationContext,
                 char : discord.Option(str, name="character", autocomplete=character_autocomplete),
                 discord_name :  discord.Option(str, required=False, autocomplete=player_autocomplete)):
+
+        char = self.convert_character_alias(char)
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
             return
@@ -577,6 +586,7 @@ class Danisen(commands.Cog):
         discord_id = ctx.author.id
         rejoin_queue = False
 
+        char = self.convert_character_alias(char)
         if not self.is_valid_char(char):
             await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
             return
@@ -595,7 +605,7 @@ class Danisen(commands.Cog):
 
 
         # Update player nickname, could be refactored to another function but idk where else to put it
-        player_nickname = ctx.author.global_name if ctx.author.global_name else ctx.author.name
+        player_nickname = ctx.author.nick if ctx.author.nick else ctx.author.global_name if ctx.author.global_name else ctx.author.name
         player_nickname = re.subn(r"(?P<char>[\*\-\_\~])", r"\\\g<char>", player_nickname)[0]
         self.logger.debug(f"player nickname post regex is {player_nickname}")
         if player_nickname != daniel['nickname']:
@@ -610,7 +620,7 @@ class Danisen(commands.Cog):
         async with self.queue_lock:
             self.logger.debug(f"join_queue for player {daniel['player_name']} acquired lock")
             #Check if in Queue already
-            self.logger.debug(f"checking that {str(discord_id)+"@"+char} is in {self.in_queue}: {str(discord_id)+"@"+char in self.in_queue} and {(str(discord_id)+"@"+char in self.in_queue) and self.in_queue[str(discord_id)+"@"+char][0]}")
+            # self.logger.debug(f"checking that {str(discord_id)+"@"+char} is in {self.in_queue}: {str(discord_id)+"@"+char in self.in_queue} and {(str(discord_id)+"@"+char in self.in_queue) and self.in_queue[str(discord_id)+"@"+char][0]}")
             if str(discord_id)+"@"+char in self.in_queue and self.in_queue[str(discord_id)+"@"+char][0]:
                 await ctx.respond(f"You are already in the queue as that character")
                 return
@@ -629,7 +639,7 @@ class Danisen(commands.Cog):
             queue_add_success = True
         
         if queue_add_success:
-            await ctx.respond(f"You've been added to the matchmaking queue with {char}")
+            await ctx.respond(f"You've been added to the matchmaking queue with {char}. Current queue length: {len(self.matchmaking_queue)}")
             await self.begin_matchmaking_timer(ctx.interaction, 30)
         else:
             await ctx.respond(f"An error with the queue mutex or code within has occured, please contact and admin.")
@@ -736,8 +746,8 @@ class Danisen(commands.Cog):
                     self.logger.debug(f"Dequeued daniel2 from dans_in_queue[{dan}]: {daniel2}")
 
                     self.logger.debug(f"player identifier: {str(daniel2['discord_id'])+"@"+daniel2['character']}, daniel1 recent: {self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]}")
-                    if str(daniel2['discord_id'])+"@"+daniel2['character'] in self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]:
-                        self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents.")
+                    if daniel2['discord_id'] in self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1] or daniel1['discord_id'] in self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][1]:
+                        self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents, or vice versa.")
                         old_daniels.append(daniel2)
                         continue
                     
@@ -762,11 +772,11 @@ class Danisen(commands.Cog):
 
                     if str(daniel2['discord_id'])+"@"+daniel2['character'] in self.in_queue:
                         self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][0] = False
-                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][1].append(str(daniel1['discord_id'])+"@"+daniel1['character'])
+                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][1].append(daniel1['discord_id'])
                     else:
-                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([str(daniel1['discord_id'])+"@"+daniel1['character']], maxlen=self.recent_opponents_limit)]
+                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([daniel1['discord_id']], maxlen=self.recent_opponents_limit)]
 
-                    self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(str(daniel2['discord_id'])+"@"+daniel2['character'])
+                    self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(daniel2['discord_id'])
 
                     # Clean up the main queue for players that have already been matched
                     for idx in reversed(range(len(self.matchmaking_queue))):
@@ -868,6 +878,8 @@ class Danisen(commands.Cog):
                            player2_name: discord.Option(str, autocomplete=player_autocomplete),
                            char2: discord.Option(str, autocomplete=character_autocomplete),
                            winner: discord.Option(str, choices=players)):
+        char1 = self.convert_character_alias(char1)
+        char2 = self.convert_character_alias(char2)
         if not self.is_valid_char(char1):
             await ctx.respond(f"Invalid char1 selected {char1}. Please choose a valid char1.")
             return
@@ -992,6 +1004,7 @@ class Danisen(commands.Cog):
     def create_paginated_embeds(self, title, data, fields_per_page, colour=None):
         """Helper function to create paginated embeds."""
         page_list = []
+        fields_per_page += 1 # Includes Title
         total_pages = (len(data) // fields_per_page) + 1
         items_per_page = len(data) // total_pages
         for page in range(total_pages):
@@ -1234,7 +1247,7 @@ class Danisen(commands.Cog):
             inline=False
         )
 
-        winrate_info = await self.get_winrate_by_id(user_res['discord_id'])
+        winrate_info = self.get_winrate_by_id(user_res['discord_id'])
 
         em.add_field(
             name=f"Set Winrate:",
@@ -1261,12 +1274,21 @@ class Danisen(commands.Cog):
             inline=False
         )
 
+        char_winrates = self.get_all_char_winrate_by_id(user_res['discord_id'])
+
         for row in res:
-            em.add_field(
-                name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
-                value=f"Dan {row['dan']}, {round(row['points'], 1):.1f} points", 
-                inline=False
-            )
+            if row['character'] in char_winrates:
+                em.add_field(
+                    name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
+                    value=f"Dan {row['dan']}, {round(row['points'], 1):.1f} points. {char_winrates[row['character']][2]:.2f}% Winrate ({char_winrates[row['character']][0]}W, {char_winrates[row['character']][1]}L)", 
+                    inline=False
+                )
+            else:
+                em.add_field(
+                    name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
+                    value=f"Dan {row['dan']}, {round(row['points'], 1):.1f} points. 0.00% Winrate (0W, 0L)", 
+                    inline=False
+                )
 
         await ctx.respond(embed=em)
 
@@ -1349,17 +1371,17 @@ class Danisen(commands.Cog):
         p2_point_potential = [1.0, -1.0]
 
         if player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_2: # player1 four or more above player2
-            p1_potential = [0.1, -1]
-            p2_potential = [2, -0.1]
+            p2_point_potential = [0.3, -1]
+            p2_point_potential = [3, -0.3]
         elif player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_1: # player1 two or three above player2
-            p1_potential = [0.5, -1]
-            p2_potential = [1.5, -0.5]
+            p2_point_potential = [0.5, -1]
+            p2_point_potential = [2, -0.5]
         elif player2['dan'] >= player1['dan']  + self.rank_gap_for_more_points_2: # player2 four or more above player1
-            p1_potential = [2, -0.1]
-            p2_potential = [0.1, -1]
+            p2_point_potential = [3, -0.3]
+            p2_point_potential = [0.3, -1]
         elif player2['dan'] >= player1['dan'] + self.rank_gap_for_more_points_1: # player2 two or three above player1
-            p1_potential = [1.5, -0.1]
-            p2_potential = [0.1, -1]
+            p2_point_potential = [2, -0.5]
+            p2_point_potential = [0.5, -1]
         
 
         # Rankup logic with special rules and Rankdown logic
@@ -1370,12 +1392,12 @@ class Danisen(commands.Cog):
         if p2_current_points + p2_point_potential[0] >= rankup_points and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
             ret[1] = 1
         elif p2_current_points + p2_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
-            ret[0] = -1
+            ret[1] = -1
 
         return ret 
 
     # Returns in format (percentage, wins, losses)
-    async def get_winrate_by_id(self, discord_id: int):
+    def get_winrate_by_id(self, discord_id: int):
         winning_sets = 0
         losing_sets = 0
 
@@ -1392,8 +1414,34 @@ class Danisen(commands.Cog):
         else:
             return (100 * (winning_sets / (winning_sets + losing_sets)), winning_sets, losing_sets)
 
+    def get_all_char_winrate_by_id(self, discord_id: int):
+        ret = {} # in the form {character: [wins, losses, winrate]}
+        res = self.database_cur.execute(f"SELECT winner_character AS character, COUNT(*) AS wins FROM matches WHERE winner_discord_id={discord_id} GROUP BY winner_character").fetchall()
+        for char_res in res:
+            if char_res['character'] not in ret:
+                ret[char_res['character']] = [char_res['wins'], 0, 100.0]
+            else:
+                ret[char_res['character']][0] = char_res['wins']
 
-    async def get_total_matches_by_id(self, discord_id: int):
+        res = self.database_cur.execute(f"SELECT loser_character AS character, COUNT(*) AS losses FROM matches WHERE loser_discord_id={discord_id} GROUP BY loser_character").fetchall()
+        for char_res in res:
+            if char_res['character'] not in ret:
+                ret[char_res['character']] = [0, char_res['losses'], 0.0]
+            else:
+                ret[char_res['character']][1] = char_res['losses']
+
+        self.logger.debug(f"all_char_winrate is {ret}")
+        for char in ret:
+            if ret[char][0] > 0 or ret[char][1] > 0:
+                ret[char][2] = 100 * ret[char][0] / (ret[char][0] + ret[char][1])
+            else:
+                ret[char][2] = 0.0
+
+        self.logger.debug(f"all_char_winrate after winrate calc is {ret}")
+        return ret
+
+
+    def get_total_matches_by_id(self, discord_id: int):
         total_sets = 0
         res = self.database_cur.execute(f"SELECT COUNT(*) AS sets FROM matches WHERE winner_discord_id={discord_id} OR loser_discord_id={discord_id}").fetchone()
         if res:
@@ -1445,9 +1493,8 @@ class Danisen(commands.Cog):
             return
 
         max_dan = self.get_players_highest_dan(ctx.author.name)
+        res = self.database_cur.execute(f"SELECT (UNIXEPOCH('now') - timestamp) AS timediff, UNIXEPOCH('now') AS timenow, invite_link FROM invites WHERE discord_id={ctx.author.id}").fetchone()
         if max_dan and max_dan >= self.minimum_invite_dan:
-            res = self.database_cur.execute(f"SELECT (UNIXEPOCH('now') - timestamp) AS timediff, UNIXEPOCH('now') AS timenow, invite_link FROM invites WHERE discord_id={ctx.author.id}").fetchone()
-
             if not res:
                 self.logger.debug(f"User {ctx.author.name} not in invites table, generating link and adding")
                 welcome_channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
@@ -1467,9 +1514,36 @@ class Danisen(commands.Cog):
             elif res:
                 await ctx.respond(f"You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>. Your last invite link was: {res['invite_link']}.", ephemeral=True)
                 return
+        elif (res and res['timediff'] < 604800):
+            await ctx.respond(f"You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>. Your last invite link was: {res['invite_link']}.", ephemeral=True)
+            return
+        elif res:
+            await ctx.respond(f"Your last invite link has expired, and you are no longer a high enough Dan (Dan {self.minimum_invite_dan}+) to generate a new invite link.", ephemeral=True)
+            return
         else:
             await ctx.respond(f"This command is only available for players Dan {self.minimum_invite_dan} and above.", ephemeral=True)
             return
+
+    # Returns the character if an alias is found, otherwise returns the input
+    def convert_character_alias(self, character: str):
+        lower_char = character.lower()
+        ret = character
+        if lower_char in self.character_aliases:
+            ret = self.character_aliases[lower_char]
+        return ret
+
+    @discord.commands.slash_command(name="updaterecentmatchlimit", description=f"[Admin Command]")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def update_recent_opponents_limit(self, ctx: discord.ApplicationContext,
+                                                  limit: discord.Option(int)):
+        self.recent_opponents_limit = limit
+        for player in self.in_queue.keys():
+            self.in_queue[player][1].maxlen = limit
+
+        ctx.respond(f"recent_opponents_limit updated to {limit}!")
+        return
+
+
 
     
 
