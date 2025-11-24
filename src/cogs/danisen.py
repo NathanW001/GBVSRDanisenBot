@@ -1371,16 +1371,16 @@ class Danisen(commands.Cog):
         p2_point_potential = [1.0, -1.0]
 
         if player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_2: # player1 four or more above player2
-            p2_point_potential = [0.3, -1]
+            p1_point_potential = [0.3, -1]
             p2_point_potential = [3, -0.3]
         elif player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_1: # player1 two or three above player2
-            p2_point_potential = [0.5, -1]
+            p1_point_potential = [0.5, -1]
             p2_point_potential = [2, -0.5]
         elif player2['dan'] >= player1['dan']  + self.rank_gap_for_more_points_2: # player2 four or more above player1
-            p2_point_potential = [3, -0.3]
+            p1_point_potential = [3, -0.3]
             p2_point_potential = [0.3, -1]
         elif player2['dan'] >= player1['dan'] + self.rank_gap_for_more_points_1: # player2 two or three above player1
-            p2_point_potential = [2, -0.5]
+            p1_point_potential = [2, -0.5]
             p2_point_potential = [0.5, -1]
         
 
@@ -1540,7 +1540,7 @@ class Danisen(commands.Cog):
         for player in self.in_queue.keys():
             self.in_queue[player][1].maxlen = limit
 
-        ctx.respond(f"recent_opponents_limit updated to {limit}!")
+        await ctx.respond(f"recent_opponents_limit updated to {limit}!")
         return
 
 
