@@ -199,7 +199,7 @@ class Danisen(commands.Cog):
                 can_rankup = loser_rank[0] >= SPECIAL_RANK_THRESHOLD
                 if not can_rankup:
                     # Reset points to rankup_points - 1 if can't rank up
-                    winner_rank[1] = rankup_points - 1
+                    winner_rank[1] = rankup_points - 0.1
             
             if can_rankup:
                 winner_rank[0] += 1
