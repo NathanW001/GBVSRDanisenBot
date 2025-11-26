@@ -10,17 +10,8 @@ from datetime import datetime
 from time import time
 
 class Danisen(commands.Cog):
-    # Predefined characters and players
-    characters = ["Gran", "Djeeta", "Katalina", "Charlotta", "Lancelot", "Percival", "Ladiva", "Metera", "Lowain", "Ferry", "Zeta", "Vaseraga", "Narmaya", "Soriz", "Zooey", "Cagliostro", "Yuel", "Anre", "Eustace", "Seox", "Vira", "Beelzebub", "Belial", "Avatar Belial", "Anila", "Siegfried", "Grimnir", "Nier", "Lucilius", "2B", "Vane", "Beatrix", "Versusia", "Vikala", "Sandalphon", "Galleon", "Wilnas", "Meg", "Lunalu"]
+    # Predefined constants
     players = ["player1", "player2"] # These are the presets for specifying which player won in /reportmatch, NOT danisen player names
-    dan_colours = [
-        discord.Colour.from_rgb(237, 237, 237), discord.Colour.from_rgb(176, 105, 48), discord.Colour.from_rgb(150, 150, 150),
-        discord.Colour.from_rgb(227, 197, 45), discord.Colour.from_rgb(23, 209, 66), discord.Colour.from_rgb(105, 215, 240), discord.Colour.from_rgb(178, 75, 219),
-        discord.Colour.from_rgb(252, 166, 220), discord.Colour.from_rgb(17, 20, 172), discord.Colour.from_rgb(240, 64, 48),
-    ] 
-    emoji_mapping = {"Gran": "<:Gran:1438571506681647235>", "Djeeta": "<:Djeeta:1438571497429012662>", "Katalina": "<:Katalina:1438571940683059331>", "Charlotta": "<:Charlotta:1438571495444975678>", "Lancelot": "<:Lancelot:1438571515275645149>", "Percival": "<:Percival:1438571533768327280>", "Ladiva": "<:Ladiva:1438571512142499930>", "Metera": "<:Metera:1438571526126567554>", "Lowain": "<:Lowain:1438571942989791313>", "Ferry": "<:Ferry:1438571501594083439>", "Zeta": "<:Zeta:1438571475958501406>", "Vaseraga": "<:Vaseraga:1438571464038154280>", "Narmaya": "<:Narmaya:1438571944579694765>", "Soriz": "<:Soriz:1438571459533340764>", "Zooey": "<:Zooey:1438571477971763262>", "Cagliostro": "<:Cagliostro:1438571948996038768>", "Yuel": "<:Yuel:1438571474104352860>", "Anre": "<:Anre:1438571481586995301>", "Eustace": "<:Eustace:1438571950828949666>", "Seox": "<:Seox:1438571538919198790>", "Vira": "<:Vira:1438571469792612393>", "Beelzebub": "<:Beelzebub:1438571488679825438>", "Belial": "<:Belial:1438571491858845767>", "Avatar Belial": "<:AvatarBelial:1438910182825525368>", "Anila": "<:Anila:1438571479741632522>", "Siegfried": "<:Siegfried:1438571541833973831>", "Grimnir": "<:Grimnir:1438571508195790959>", "Nier": "<:Nier:1438571530157293710>", "Lucilius": "<:Lucilius:1438571519419748528>", "2B": "<:2B:1438571398682513529>", "Vane": "<:Vane:1438571462351917197>", "Beatrix": "<:Beatrix:1438571485588357140>", "Versusia": "<:Versusia:1438571466051555378>", "Vikala": "<:Vikala:1438571468060622909>", "Sandalphon": "<:Sandalphon:1438571947628822538>", "Galleon": "<:Galleon:1438571953245126676>", "Wilnas": "<:Wilnas:1438571471671787520>", "Meg": "<:Meg:1438571524180414516>", "Lunalu": "<:Lunalu:1439718838034759740>"}
-    character_aliases = {"gran": "Gran", "djeeta": "Djeeta", "katalina": "Katalina", "kat": "Katalina", "charlotta": "Charlotta", "lotta": "Charlotta", "lancelot": "Lancelot", "lance": "Lancelot", "percival": "Percival", "perci": "Percival", "percy": "Percival", "ladiva": "Ladiva", "metera": "Metera", "lowain": "Lowain", "ferry": "Ferry", "zeta": "Zeta", "vaseraga": "Vaseraga", "vas": "Vaseraga", "narmaya": "Narmaya", "narm": "Narmaya", "soriz": "Soriz", "zooey": "Zooey", "cagliostro": "Cagliostro", "cag": "Cagliostro", "yuel": "Yuel", "anre": "Anre", "uno": "Anre", "eustace": "Eustace", "seox": "Seox", "six": "Seox", "vira": "Vira", "beelzebub": "Beelzebub", "bubs": "Beelzebub", "belial": "Belial", "bel": "Belial", "avatar belial": "Avatar Belial", "abel": "Avatar Belial", "anila": "Anila", "siegfried": "Siegfried", "sieg": "Siegfried", "grimnir": "Grimnir", "grim": "Grimnir", "nier": "Nier", "lucilius": "Lucilius", "luci": "Lucilius", "2b": "2B", "vane": "Vane", "beatrix": "Beatrix", "bea": "Beatrix", "versusia": "Versusia", "vers": "Versusia", "vikala": "Vikala", "sandalphon": "Sandalphon", "sandy": "Sandalphon", "galleon": "Galleon", "wilnas": "Wilnas", "meg": "Meg", "lunalu": "Lunalu"}
-
 
     def __init__(self, bot, database, config_path):
         # Initialize the cog
@@ -75,11 +66,8 @@ class Danisen(commands.Cog):
 
         # Queue and matchmaking setup
         self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}
-        self.matchmaking_queue = deque()
-        # self.max_active_matches = 3 # Disabled because of loading this from config below, if this is instantiated it overwrites it for some reason
-        
+        self.matchmaking_queue = deque()   
         self.cur_active_matches = 0
-        # self.recent_opponents_limit = 2 # Disabled for same reason above
         self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
         self.in_match = {}  # Format: discord_id: in_match
         self.matchmaking_coro = None  # Task created with asyncio to run start_matchmaking after a set delay
@@ -102,15 +90,29 @@ class Danisen(commands.Cog):
             self.logger.warning(f"Failed to load configuration: {str(e)}")  # Fix logging issue
 
         # Set all configuration values
+
+        # DISCORD CHANNEL ID CONFIG
         self.ACTIVE_MATCHES_CHANNEL_ID = int(config.get('ACTIVE_MATCHES_CHANNEL_ID', 0))
         self.REPORTED_MATCHES_CHANNEL_ID = int(config.get('REPORTED_MATCHES_CHANNEL_ID', 0))
         self.ONGOING_MATCHES_CHANNEL_ID = int(config.get('ONGOING_MATCHES_CHANNEL_ID', 0))
         self.WELCOME_CHANNEL_ID = int(config.get('WELCOME_CHANNEL_ID', 0))
+
+        # CHARACTER SETTINGS CONFIG
+        self.characters = config.get('characters', [])
+        self.emoji_mapping = config.get('emoji_mapping', {char: "" for char in self.characters})
+        self.character_aliases = config.get('character_aliases', {})
+        for char in self.characters: # Each character must exist in emoji mapping
+            if char not in self.emoji_mapping:
+                self.emoji_mapping[char] = ""
+
+        # DANISEN SETTINGS CONFIG
         self.total_dans = config.get('total_dans', MAX_DAN_RANK)
         self.minimum_derank = config.get('minimum_derank', DEFAULT_DAN)
         self.rank_gap_for_more_points_1 = config.get('rank_gap_for_more_points_1', 2)
         self.rank_gap_for_more_points_2 = config.get("rank_gap_for_more_points_2", 4)
         self.point_rollover = config.get('point_rollover', True)
+
+        # MATCHMAKING QUEUE CONFIG
         self.queue_status = config.get('queue_status', True)
         self.recent_opponents_limit = config.get('recent_opponents_limit', 3)
         self.max_active_matches = config.get('max_active_matches', 7)  # New parameter
@@ -152,7 +154,7 @@ class Danisen(commands.Cog):
         rankup = False
 
         # Determine rankup points based on rank type
-        rankup_points = RANKUP_POINTS_NORMAL # RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+        rankup_points =  RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
 
         # Winning and Losing logic
         if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_2: # lower ranked player wins with 4 rank gap
@@ -1232,11 +1234,12 @@ class Danisen(commands.Cog):
         ).fetchone()
 
         player_highest_dan = self.get_players_highest_dan(member.name)
+        dan_colour = discord.utils.get(ctx.guild.roles, name=f"Dan {player_highest_dan}").color
 
         # Create an embed to display the profile
         em = discord.Embed(
             title=f"{user_res['nickname']}'s Profile",
-            color=self.dan_colours[player_highest_dan-1]
+            color=dan_colour
         )
         if member.avatar:
             em.set_thumbnail(url=member.avatar.url)
@@ -1359,7 +1362,7 @@ class Danisen(commands.Cog):
 
     async def check_rankup_potential(self, player1, player2):
         # Determine rankup points based on rank type
-        rankup_points = RANKUP_POINTS_NORMAL # RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+        rankup_points = RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
 
         # The return array, index 0 is p1 index 1 is p2, value of 0 means nothing, 1 means rankup chance, -1 means rankdown chance
         ret = [0, 0]
