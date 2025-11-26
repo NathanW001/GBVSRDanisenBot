@@ -29,7 +29,7 @@ DEFAULT_CONFIG = {
     "queue_status": True,
     "special_rank_up_rules": False,
     "max_active_matches": 5,
-    "minimum_invite_dan": 4
+    "minimum_invite_dan": 4,
     "characters": [],
     "emoji_mapping": {},
     "character_aliases": {} 
