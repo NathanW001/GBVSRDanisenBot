@@ -147,9 +147,9 @@ class Danisen(commands.Cog):
 
     async def score_update(self, ctx, winner, loser):
         # Update scores for a match
-        # Format of [Dan, Points, Rankup?, PointDelta]
-        winner_rank = [winner['dan'], winner['points'], False, 0.0]
-        loser_rank = [loser['dan'], loser['points'], False, 0,0]
+        # Format of [Dan, Points, Rankup?, PointDelta, RankupBlock]
+        winner_rank = [winner['dan'], winner['points'], False, 0.0, False]
+        loser_rank = [loser['dan'], loser['points'], False, 0,0, False]
         rankdown = False
         rankup = False
 
@@ -199,7 +199,9 @@ class Danisen(commands.Cog):
                 can_rankup = loser_rank[0] >= SPECIAL_RANK_THRESHOLD
                 if not can_rankup:
                     # Reset points to rankup_points - 1 if can't rank up
+                    winner_rank[3] = round((rankup_points - 0.1) - (winner_rank[1] - winner_rank[3]), 1) # max points before rankup - initial points
                     winner_rank[1] = rankup_points - 0.1
+                    winner_rank[4] = True
             
             if can_rankup:
                 winner_rank[0] += 1
@@ -932,10 +934,13 @@ class Danisen(commands.Cog):
         )
         self.database_con.commit()
 
+        rankup_message = ", Rank up!" if winner_rank[2] else f", Unable to rank up, must beat an opponent Dan {SPECIAL_RANK_THRESHOLD} or higher." if winner_rank[4] else ""
+        rankdown_message = ", Rank down..." if loser_rank[2] else ""
+
         await ctx.respond(
             f"### The match has been reported as <@{winner_id}>'s victory over <@{loser_id}>!\n"
-            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){", Rank up!" if winner_rank[2] else ""})\n"
-            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** ({loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})"
+            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){rankup_message})\n"
+            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** ({loser_rank[3]} point(s){rankdown_message})"
         )
 
     #report match score for the queue
@@ -973,13 +978,15 @@ class Danisen(commands.Cog):
         self.database_con.commit()
 
         view = RequeueView(self, player1, player2)
+        rankup_message = ", Rank up!" if winner_rank[2] else f", Unable to rank up, must beat an opponent Dan {SPECIAL_RANK_THRESHOLD} or higher." if winner_rank[4] else ""
+        rankdown_message = ", Rank down..." if loser_rank[2] else ""
 
         channel = self.bot.get_channel(self.REPORTED_MATCHES_CHANNEL_ID)
         if channel:
             await channel.send(
                 content=f"### The match has been reported as <@{winner_id}>'s victory over <@{loser_id}>!\n"
-                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){", Rank up!" if winner_rank[2] else ""})\n"
-                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** ({loser_rank[3]} point(s){", Rank down..." if loser_rank[2] else ""})",
+                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){rankup_message})\n"
+                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** ({loser_rank[3]} point(s){rankdown_message})",
                 view=view
                 )
         else:
@@ -1362,7 +1369,8 @@ class Danisen(commands.Cog):
 
     async def check_rankup_potential(self, player1, player2):
         # Determine rankup points based on rank type
-        rankup_points = RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+        rankup_points_p1 = RANKUP_POINTS_SPECIAL if player1['dan'] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+        rankup_points_p2 = RANKUP_POINTS_SPECIAL if player2['dan'] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
 
         # The return array, index 0 is p1 index 1 is p2, value of 0 means nothing, 1 means rankup chance, -1 means rankdown chance
         ret = [0, 0]
@@ -1388,11 +1396,11 @@ class Danisen(commands.Cog):
         
 
         # Rankup logic with special rules and Rankdown logic
-        if p1_current_points + p1_point_potential[0] >= rankup_points and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
+        if p1_current_points + p1_point_potential[0] >= rankup_points_p1 and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
             ret[0] = 1
         elif p1_current_points + p1_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
             ret[0] = -1
-        if p2_current_points + p2_point_potential[0] >= rankup_points and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
+        if p2_current_points + p2_point_potential[0] >= rankup_points_p2 and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
             ret[1] = 1
         elif p2_current_points + p2_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
             ret[1] = -1
