@@ -1016,23 +1016,64 @@ class Danisen(commands.Cog):
                 em.add_field(name=f"#{idx+1}: {data[idx]['name']}", value=f"Current Rank: {data[idx]['value']}", inline=False)
         return page_list
 
+    def create_paginated_character_embeds(self, title, data, fields_per_page, colour=None):
+        """Helper function to create paginated embeds."""
+        page_list = []
+        fields_per_page += 1 # Includes Title
+        total_pages = (len(data) // fields_per_page) + 1
+        items_per_page = len(data) // total_pages
+        for page in range(total_pages):
+            em = discord.Embed(title=f"{title} ({page + 1}/{total_pages})", colour=colour)
+            page_list.append(em)
+            for idx in range(page * items_per_page, min((page + 1) * items_per_page, len(data))):
+                em.add_field(name=f"{data[idx]['name']}: {data[idx]['character_count']} registered player(s)", value=f"Total Wins: {data[idx]['wins']}, Total Losses: {data[idx]['losses']}, Winrate: {data[idx]['winrate']:.1f}%", inline=False)
+        return page_list
+
+    def create_paginated_dan_embeds(self, title, data, fields_per_page, colour=None):
+        """Helper function to create paginated embeds."""
+        page_list = []
+        fields_per_page += 1 # Includes Title
+        total_pages = (len(data) // fields_per_page) + 1
+        items_per_page = len(data) // total_pages
+        for page in range(total_pages):
+            em = discord.Embed(title=f"{title} ({page + 1}/{total_pages})", colour=colour)
+            page_list.append(em)
+            for idx in range(page * items_per_page, min((page + 1) * items_per_page, len(data))):
+                em.add_field(name=f"{data[idx]['name']}:", value=f"Current Players: {data[idx]['value']}", inline=False)
+        return page_list
+
+    def create_danisen_stat_embed(self, title, data, fields_per_page, colour=None):
+        """Helper function to create paginated embeds."""
+        page_list = []
+        em = discord.Embed(title=f"{title}", colour=colour)
+        page_list.append(em)
+        em.add_field(name=f"Current Unique Players", value=f"{data['accounts']} people registered", inline=False)
+        em.add_field(name=f"Total Characters Registered", value=f"{data['characters']} characters registered", inline=False)
+        em.add_field(name=f"Total Matches Played", value=f"{data['total_games']} sets", inline=False)
+
+        return page_list
+
     # Refactor danisen_stats to use the helper function
-    # @discord.commands.slash_command(name="danisenstats", description="See various statistics about the danisen")
-    # async def danisen_stats(self, ctx: discord.ApplicationContext):
-    #     char_count = self.database_cur.execute(
-    #         "SELECT character AS name, COUNT(*) AS value FROM players GROUP BY character ORDER BY character"
-    #     ).fetchall()
-    #     dan_count = self.database_cur.execute(
-    #         "SELECT dan AS name, COUNT(*) AS value FROM players GROUP BY dan ORDER BY dan"
-    #     ).fetchall()
+    @discord.commands.slash_command(name="danisenstats", description="See various statistics about the danisen")
+    async def danisen_stats(self, ctx: discord.ApplicationContext):
+        danisen_info = self.database_cur.execute(
+            "SELECT accounts, characters, total_games FROM (SELECT COUNT(*) AS accounts FROM users) AS AccountsTable JOIN (SELECT COUNT(*) AS characters FROM players) AS CharactersTable JOIN (SELECT COUNT(*) AS total_games FROM matches) AS MatchesTable"
+        ).fetchone()
+        char_info = self.database_cur.execute(
+            "SELECT CharCountTable.character AS name, character_count, wins, losses, ROUND(100.0 * wins / (wins + losses), 1) AS winrate FROM (SELECT character, COUNT(*) AS character_count FROM players GROUP BY character) AS CharCountTable JOIN (SELECT winner_character AS character, COUNT(*) AS wins FROM matches GROUP BY winner_character) AS CharWinTable ON CharCountTable.character = CharWinTable.character JOIN (SELECT loser_character AS character, COUNT(*) AS losses FROM matches GROUP BY loser_character) AS CharLossTable ON CharCountTable.character = CharLossTable.character GROUP BY CharCountTable.character ORDER BY character_count DESC"
+        ).fetchall()
+        dan_count = self.database_cur.execute(
+            "SELECT dan AS name, COUNT(*) AS value FROM players GROUP BY dan ORDER BY dan"
+        ).fetchall()
 
-    #     # reformat dan count as their names are just numbers
-    #     dan_count = [{"name": f"Dan {dan['name']}", "value": dan['value']} for dan in dan_count]
-    #     char_pages = self.create_paginated_embeds("Character Stats", char_count, MAX_FIELDS_PER_EMBED)
-    #     dan_pages = self.create_paginated_embeds("Dan Stats", dan_count, MAX_FIELDS_PER_EMBED, colour=discord.Color.blurple())
+        # reformat dan count as their names are just numbers
+        dan_count = [{"name": f"Dan {dan['name']}", "value": dan['value']} for dan in dan_count]
+        danisen_pages = self.create_danisen_stat_embed("General Danisen Stats", danisen_info, MAX_FIELDS_PER_EMBED)
+        char_pages = self.create_paginated_character_embeds("Character Usage Stats", char_info, MAX_FIELDS_PER_EMBED)
+        dan_pages = self.create_paginated_dan_embeds("Dan Stats", dan_count, MAX_FIELDS_PER_EMBED, colour=discord.Color.blurple())
 
-    #     paginator = pages.Paginator(pages=char_pages + dan_pages)
-    #     await paginator.respond(ctx.interaction, ephemeral=False)
+        paginator = pages.Paginator(pages=danisen_pages + char_pages + dan_pages)
+        await paginator.respond(ctx.interaction, ephemeral=False)
 
     # I've currently commented this out, I intend to reimplement it using a different sqlite table and more extensive stats tracking
 
