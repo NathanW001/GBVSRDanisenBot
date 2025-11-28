@@ -9,7 +9,7 @@ else:  # Running from source
     CONFIG_DIR = os.path.join(PROJECT_ROOT, 'config')
 # Project paths
 
-DB_PATH = os.path.join(CONFIG_DIR, 'danisen.db')
+DB_PATH = os.path.join(CONFIG_DIR, 'ranked.db')
 CONFIG_PATH = os.path.join(CONFIG_DIR, 'config.json')
 LOG_FILE = os.path.join(PROJECT_ROOT, 'bot.log')
 
@@ -22,17 +22,16 @@ DEFAULT_CONFIG = {
     "total_dans": 10,
     "minimum_derank": 1,
     "maximum_rank_difference": 1,
-    "rank_gap_for_more_points_1": 2,
-    "rank_gap_for_more_points_2": 4,
     "recent_opponents_limit": 3,
-    "point_rollover": True,
     "queue_status": True,
-    "special_rank_up_rules": False,
     "max_active_matches": 5,
-    "minimum_invite_dan": 4,
     "characters": [],
     "emoji_mapping": {},
-    "character_aliases": {} 
+    "character_aliases": {},
+    "glicko_tau": 0.3,
+    "glicko_default_rating": 1500,
+    "glicko_default_rd": 350,
+    "glicko_default_volatility": 0.06
 }
 # Logging colors
 LOG_COLORS = {
@@ -44,20 +43,15 @@ LOG_COLORS = {
 }
 
 # GUI constants
-GUI_WINDOW_TITLE = "Danisen Bot"
+GUI_WINDOW_TITLE = "Ranked Bot"
 GUI_MIN_WIDTH = 600
 GUI_MIN_HEIGHT = 400
 
 
 #Danisen Constants
 MAX_FIELDS_PER_EMBED = 10
-MAX_DAN_RANK = 10
-SPECIAL_RANK_THRESHOLD = 7
-RANKUP_POINTS_NORMAL = 3
-RANKUP_POINTS_SPECIAL = 5
-RANKDOWN_POINTS = -3
-DEFAULT_DAN = 1
-DEFAULT_POINTS = 0.0
+DEFAULT_RATING = 1500.0
+DEFAULT_RATING_DEVIATION = 350.0
 
 # Ensure config directory exists
 os.makedirs(CONFIG_DIR, exist_ok=True)

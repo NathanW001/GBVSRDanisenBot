@@ -1,6 +1,6 @@
 import discord
 import sqlite3
-from cogs.danisen import *
+from cogs.ranked import *
 import json
 import os
 import logging
@@ -13,7 +13,7 @@ def create_bot(con):
 
     bot = discord.Bot(intents=intents)
 
-    bot.add_cog(Danisen(bot,con,CONFIG_PATH))
+    bot.add_cog(Ranked(bot,con,CONFIG_PATH))
 
     # Create and configure logger
     logger = logging.getLogger(__name__)
@@ -26,5 +26,5 @@ def create_bot(con):
     return bot
 
 def update_bot_config(bot):
-    danisen = bot.get_cog("Danisen")
-    danisen.update_config()
+    ranked = bot.get_cog("Ranked")
+    ranked.update_config()

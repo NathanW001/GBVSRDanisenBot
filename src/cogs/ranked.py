@@ -1,4 +1,4 @@
-import discord, sqlite3, asyncio, json, logging, re
+import discord, sqlite3, asyncio, json, logging, re, math
 from discord.ext import commands, pages
 from cogs.database import *
 from cogs.custom_views import *
@@ -9,7 +9,7 @@ from random import choice
 from datetime import datetime
 from time import time
 
-class Danisen(commands.Cog):
+class Ranked(commands.Cog):
     # Predefined constants
     players = ["player1", "player2"] # These are the presets for specifying which player won in /reportmatch, NOT danisen player names
 
@@ -39,8 +39,10 @@ class Danisen(commands.Cog):
         self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS players("
                                                                     f"discord_id INT NOT NULL,"
                                                                     f"character TEXT NOT NULL,"
-                                                                    f"dan INT NOT NULL,"
-                                                                    f"points FLOAT NOT NULL,"
+                                                                    f"glicko_rating FLOAT NOT NULL,"
+                                                                    f"glicko_rd FLOAT NOT NULL,"
+                                                                    f"glicko_variance FLOAT NOT NULL,"
+                                                                    f"last_rating_period FLOAT NOT NULL,"
                                                                     f"FOREIGN KEY (discord_id) REFERENCES users ON UPDATE CASCADE ON DELETE CASCADE,"
                                                                     f"PRIMARY KEY (discord_id, character)"
                                                                     f")")
@@ -56,16 +58,15 @@ class Danisen(commands.Cog):
                                                                     f"FOREIGN KEY (loser_discord_id, loser_character) REFERENCES players(discord_id, character) ON UPDATE CASCADE ON DELETE SET NULL"
                                                                     f")")
 
-        self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS invites("
-                                                                    f"discord_id INT NOT NULL,"
-                                                                    f"invite_link TEXT,"
-                                                                    f"timestamp INTEGER," # uses unix time
-                                                                    f"FOREIGN KEY (discord_id) REFERENCES users (discord_id) ON UPDATE CASCADE ON DELETE CASCADE,"
-                                                                    f"PRIMARY KEY (discord_id)"
-                                                                    f")")
+        # self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS invites("
+        #                                                             f"discord_id INT NOT NULL,"
+        #                                                             f"invite_link TEXT,"
+        #                                                             f"timestamp INTEGER," # uses unix time
+        #                                                             f"FOREIGN KEY (discord_id) REFERENCES users (discord_id) ON UPDATE CASCADE ON DELETE CASCADE,"
+        #                                                             f"PRIMARY KEY (discord_id)"
+        #                                                             f")")
 
         # Queue and matchmaking setup
-        self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}
         self.matchmaking_queue = deque()   
         self.cur_active_matches = 0
         self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
@@ -105,19 +106,17 @@ class Danisen(commands.Cog):
             if char not in self.emoji_mapping:
                 self.emoji_mapping[char] = ""
 
-        # DANISEN SETTINGS CONFIG
-        self.total_dans = config.get('total_dans', MAX_DAN_RANK)
-        self.minimum_derank = config.get('minimum_derank', DEFAULT_DAN)
-        self.rank_gap_for_more_points_1 = config.get('rank_gap_for_more_points_1', 2)
-        self.rank_gap_for_more_points_2 = config.get("rank_gap_for_more_points_2", 4)
-        self.point_rollover = config.get('point_rollover', True)
-
         # MATCHMAKING QUEUE CONFIG
         self.queue_status = config.get('queue_status', True)
         self.recent_opponents_limit = config.get('recent_opponents_limit', 3)
         self.max_active_matches = config.get('max_active_matches', 7)  # New parameter
-        self.special_rank_up_rules = config.get('special_rank_up_rules', False)
-        self.minimum_invite_dan = config.get('minimum_invite_dan', 4)
+
+        # GLICKO-2 CONSTANTS
+        self.tau = config.get('glicko_tau', 0.3)
+        self.default_rating = config.get('glicko_default_rating', 1500)
+        self.default_rd = config.get('glicko_default_rd', 350)
+        self.default_volatility = config.get('glicko_default_volatility', 0.06)
+
 
     @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
     @discord.commands.default_permissions(manage_roles=True)
@@ -126,24 +125,22 @@ class Danisen(commands.Cog):
         self.queue_status = queue_status
         if not queue_status:
             self.matchmaking_queue.clear()  # Clear the deque
-            self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Reset to empty deques
             self.in_queue = {}
             self.in_match = {}
             await ctx.respond("The matchmaking queue has been disabled.")
         else:
             await ctx.respond("The matchmaking queue has been enabled.")
 
-    def dead_role(self, ctx, player):
-        # Check if a player's dan role should be removed
-        role = None
-        self.logger.info(f'Checking if dan should be removed as well')
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan={player['dan']}")
-        remaining_daniel = res.fetchone()
-        if not remaining_daniel:
-            self.logger.info(f"Dan role {player['dan']} will be removed")
-            role = discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}")
-        return role
-
+    # def dead_role(self, ctx, player):
+    #     # Check if a player's dan role should be removed
+    #     role = None
+    #     self.logger.info(f'Checking if dan should be removed as well')
+    #     res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={player['discord_id']} AND dan={player['dan']}")
+    #     remaining_daniel = res.fetchone()
+    #     if not remaining_daniel:
+    #         self.logger.info(f"Dan role {player['dan']} will be removed")
+    #         role = discord.utils.get(ctx.guild.roles, name=f"Dan {player['dan']}")
+    #     return role
 
     async def score_update(self, ctx, winner, loser):
         # Update scores for a match
@@ -477,7 +474,8 @@ class Danisen(commands.Cog):
             role_list.append(discord.utils.get(ctx.guild.roles, name=char1))
         self.logger.info(f"Removing role {char1} from member")
 
-        role = self.dead_role(ctx, daniel)
+        # TODO: Check if player should lose a role
+        role = None
         if role:
             role_list.append(role)
 
@@ -565,16 +563,14 @@ class Danisen(commands.Cog):
 
             if char is not None and daniels != []:
                 for daniel in daniels:
-                    if daniel in self.dans_in_queue[daniel['dan']]:
-                        self.dans_in_queue[daniel['dan']].remove(daniel)
+                    if daniel in self.matchmaking_queue:
                         self.matchmaking_queue.remove(daniel)
 
                     self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
                 await ctx.respond(f"You have been removed from the queue as {char}.")
             elif daniels != []:
                 for daniel in daniels:
-                    if daniel in self.dans_in_queue[daniel['dan']]:
-                        self.dans_in_queue[daniel['dan']].remove(daniel)
+                    if daniel in self.matchmaking_queue:
                         self.matchmaking_queue.remove(daniel)
 
                     self.in_queue[str(daniel['discord_id'])+"@"+daniel['character']][0] = False
@@ -1595,9 +1591,96 @@ class Danisen(commands.Cog):
         await ctx.respond(f"recent_opponents_limit updated to {limit}!")
         return
 
+    ### GLICKO-2 ALGORITHM IMPLEMENTATION WITH FRACTIONAL RATINGS
+
+    # Step 2 of the Glicko 2 algorithm
+    def convert_to_glicko_scale(self, rating: float, rd: float):
+        new_rating = (rating - self.default_rating) / 173.7178
+        new_rd = rd / 173.7178
+
+        return new_rating, new_rd
+
+    # Step 8, but also here for organization
+    def convert_from_glicko_scale(self, glicko_rating: float, glicko_rd: float):
+        new_rating = (173.7178 * glicko_rating) + self.default_rating
+        new_rd = 173.7178 * glicko_rd
+
+        return new_rating, new_rd
+
+    # Step 3
+    def glicko_v(self, mu: float, opponent_mus: list[float], opponent_phis: list[float]):
+        ret_frac = 0
+        for i in range(len(opponent_ratings)):
+            E_res = self.glicko_E(mu, opponent_mus[i], opponent_phis[i])
+            g_res = self.glicko_g(opponent_phis[i])
+            ret += math.pow(g_res, 2) * E_res * (1 - E_res)
+
+        return 1 / ret_frac
+
+    def glicko_g(self, phi: float):
+        return 1 / math.sqrt(1 + 3 * math.pow(phi, 2) / math.pow(math.pi, 2))
+
+    def glicko_E(self, mu: float, opponent_mu: float, opponent_phi: float):
+        return 1 / (1 + math.exp(-1 * self.glicko_g(opponent_phi) * (mu - opponent_mu)))
+
+    # Step 4
+    def glicko_delta(self, v: float, mu: float, opponent_mus: list[float], opponent_phis: list[float], game_outcomes: list[float]):
+        ret = 0
+        for i in range(len(opponent_ratings)):
+            E_res = self.glicko_E(mu, opponent_mus[i], opponent_phis[i])
+            g_res = self.glicko_g(opponent_phis[i])
+            ret += g_res * (game_outcomes[i] - E_res)
+        
+        return ret * v
+
+    # Step 5, returns sigma prime value
+    def glicko_new_volatility(self, phi: float, sigma: float, delta: float, v: float):
+        convergence_epsilon = 0.000001
+        a = math.log(math.pow(sigma, 2))
+        big_a = a
+        big_b = math.log(math.pow(delta, 2) - math.pow(phi, 2) - v)
+        if math.pow(delta, 2) <= math.pow(phi, 2) + v:
+            k = 1
+            k_func_res = self.glicko_volatility_f_helper(a - (k * self.tau))
+            while k_func_res < 0:
+                k += 1
+                k_func_res = self.glicko_volatility_f_helper(a - (k * self.tau))
+            big_b = a - (k * self.tau)
+        
+        big_a_func_res = self.glicko_volatility_f_helper(big_a)
+        big_b_func_res = self.glicko_volatility_f_helper(big_b)
+        while abs(big_a - big_b) > convergence_epsilon:
+            big_c = big_a + ((big_a - big_b) * big_a_func_res) / (big_b_func_res - big_a_func_res)
+            big_c_func_res = self.glicko_volatility_f_helper(big_c)
+            if big_c_func_res * big_b_func_res <= 0:
+                big_a = big_b
+                big_a_func_res = big_b_func_res
+            else:
+                big_a_func_res /= 2
+            big_b = big_c
+            big_b_func_res = big_c_func_res
+
+        return math.pow(math.2, (big_a / 2))
+
+    def glicko_volatility_f_helper(self, x: float, a: float, phi: float, delta: float, v: float):
+        return ((math.pow(math.e, x) * (math.pow(delta, 2) - math.pow(phi, 2) - v - math.pow(math.e, x))) / (2 * math.pow((math.pow(phi, 2) + v + math.pow(math.e, x)), 2))) - ((x - a) / math.pow(self.tau, 2))
+
+    # Step 6, with fractional rating implementation from Lichess
+    # also, this is the only function that is applied when a player has no played games in a given rating period
+    def glicko_new_rd_star(self, phi: float, sigma_prime: float, elapsed_rating_periods: float):
+        return math.sqrt(math.pow(phi, 2) + elapsed_rating_periods * math.pow(sigma_prime, 2))
+
+    # Step 7, returns phi_prime, mu_prime
+    def glicko_new_rating_and_rd(self, phi_star: float, v: float, mu: float, opponent_mus: list[float], opponent_phis: list[float], game_outcomes: list[float]):
+        phi_prime = 1 / math.sqrt((1/math.pow(phi_star, 2)) + (1 / v))
+        mu_sum = 0
+        for i in range(len(opponent_ratings)):
+            E_res = self.glicko_E(mu, opponent_mus[i], opponent_phis[i])
+            g_res = self.glicko_g(opponent_phis[i])
+            mu_sum += g_res * (game_outcomes[i] - E_res)
+        mu_prime = mu + math.pow(phi_prime, 2) * mu_sum
 
 
-    
 
 
 
