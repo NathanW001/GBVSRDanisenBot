@@ -130,10 +130,16 @@ class Danisen(commands.Cog):
             self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Reset to empty deques
             self.in_queue = {}
             self.in_match = {}
-            await self.rename_danisen_status_channel(False)
+            # try:
+            #     await self.rename_danisen_status_channel(False)
+            # except:
+            #     self.logger.warning("Couldn't change channel name")
             await ctx.respond("The matchmaking queue has been disabled.")
         else:
-            await self.rename_danisen_status_channel(True)
+            # try:
+            #     await self.rename_danisen_status_channel(True)
+            # except:
+            #     self.logger.warning("Couldn't change channel name")
             await ctx.respond("The matchmaking queue has been enabled.")
 
     def dead_role(self, ctx, player):
