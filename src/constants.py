@@ -19,6 +19,7 @@ DEFAULT_CONFIG = {
     "REPORTED_MATCHES_CHANNEL_ID": "0",
     "ONGOING_MATCHES_CHANNEL_ID": "0",
     "WELCOME_CHANNEL_ID": "0",
+    "DANISEN_STATUS_CHANNEL_ID": "0",
     "total_dans": 10,
     "minimum_derank": 1,
     "maximum_rank_difference": 1,

@@ -96,6 +96,7 @@ class Danisen(commands.Cog):
         self.REPORTED_MATCHES_CHANNEL_ID = int(config.get('REPORTED_MATCHES_CHANNEL_ID', 0))
         self.ONGOING_MATCHES_CHANNEL_ID = int(config.get('ONGOING_MATCHES_CHANNEL_ID', 0))
         self.WELCOME_CHANNEL_ID = int(config.get('WELCOME_CHANNEL_ID', 0))
+        self.DANISEN_STATUS_CHANNEL_ID = int(config.get('DANISEN_STATUS_CHANNEL_ID', 0))
 
         # CHARACTER SETTINGS CONFIG
         self.characters = config.get('characters', [])
@@ -129,8 +130,10 @@ class Danisen(commands.Cog):
             self.dans_in_queue = {dan: deque() for dan in range(1, self.total_dans + 1)}  # Reset to empty deques
             self.in_queue = {}
             self.in_match = {}
+            await self.rename_danisen_status_channel(False)
             await ctx.respond("The matchmaking queue has been disabled.")
         else:
+            await self.rename_danisen_status_channel(True)
             await ctx.respond("The matchmaking queue has been enabled.")
 
     def dead_role(self, ctx, player):
@@ -1595,6 +1598,16 @@ class Danisen(commands.Cog):
         await ctx.respond(f"recent_opponents_limit updated to {limit}!")
         return
 
+    async def rename_danisen_status_channel(self, danisen_status: bool):
+        channel = self.bot.get_channel(self.DANISEN_STATUS_CHANNEL_ID)
+        status_message = "✅OPEN✅" if danisen_status else "❌CLOSED❌"
+        if channel:
+            try:
+                await channel.edit(name=status_message)
+            except:
+                self.logger.warning("Couldn't change channel name")
+        else:
+            self.logger.warning("No Danisen Status Channel")
 
 
     
