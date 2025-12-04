@@ -19,9 +19,6 @@ DEFAULT_CONFIG = {
     "REPORTED_MATCHES_CHANNEL_ID": "0",
     "ONGOING_MATCHES_CHANNEL_ID": "0",
     "WELCOME_CHANNEL_ID": "0",
-    "total_dans": 10,
-    "minimum_derank": 1,
-    "maximum_rank_difference": 1,
     "recent_opponents_limit": 3,
     "queue_status": True,
     "max_active_matches": 5,
@@ -31,7 +28,8 @@ DEFAULT_CONFIG = {
     "glicko_tau": 0.3,
     "glicko_default_rating": 1500,
     "glicko_default_rd": 350,
-    "glicko_default_volatility": 0.06
+    "glicko_default_volatility": 0.06,
+    "glicko_rating_period_length": 3
 }
 # Logging colors
 LOG_COLORS = {

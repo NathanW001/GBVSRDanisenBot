@@ -41,7 +41,7 @@ class Ranked(commands.Cog):
                                                                     f"character TEXT NOT NULL,"
                                                                     f"glicko_rating FLOAT NOT NULL,"
                                                                     f"glicko_rd FLOAT NOT NULL,"
-                                                                    f"glicko_variance FLOAT NOT NULL,"
+                                                                    f"glicko_volatility FLOAT NOT NULL,"
                                                                     f"last_rating_period FLOAT NOT NULL,"
                                                                     f"FOREIGN KEY (discord_id) REFERENCES users ON UPDATE CASCADE ON DELETE CASCADE,"
                                                                     f"PRIMARY KEY (discord_id, character)"
@@ -116,6 +116,7 @@ class Ranked(commands.Cog):
         self.default_rating = config.get('glicko_default_rating', 1500)
         self.default_rd = config.get('glicko_default_rd', 350)
         self.default_volatility = config.get('glicko_default_volatility', 0.06)
+        self.rating_period_length = config.get('glicko_rating_period_length', 3) # measured in days
 
 
     @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
@@ -144,113 +145,82 @@ class Ranked(commands.Cog):
 
     async def score_update(self, ctx, winner, loser):
         # Update scores for a match
-        # Format of [Dan, Points, Rankup?, PointDelta, RankupBlock]
-        winner_rank = [winner['dan'], winner['points'], False, 0.0, False]
-        loser_rank = [loser['dan'], loser['points'], False, 0,0, False]
+        # Format of [Rating, RD, Rankup?, PointDelta]
+        winner_rank = [0.0, 0.0, False, 0.0]
+        loser_rank = [0.0, 0.0, False, 0.0]
         rankdown = False
         rankup = False
 
-        # Determine rankup points based on rank type
-        rankup_points =  RANKUP_POINTS_SPECIAL if winner_rank[0] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+        # glicko-2 calculations
+        winner_rating, winner_rd, winner_volatility = winner['glicko_rating'], winner['glicko_rd'], winner['glicko_volatility']
+        loser_rating, loser_rd, loser_volatility = loser['glicko_rating'], loser['glicko_rd'], loser['glicko_volatility']
+        p1_elapsed_rating_periods = 1.0 # TODO: set to proper period by adding timestamps to db
+        p2_elapsed_rating_periods = 1.0
 
-        # Winning and Losing logic
-        if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_2: # lower ranked player wins with 4 rank gap
-            winner_rank[1] += 3.0
-            winner_rank[3] += 3.0
-            loser_rank[1] -= 1.0
-            loser_rank[3] -= 1.0
-        elif loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_1: # lower ranked player wins with 2 rank gap
-            winner_rank[1] += 2.0
-            winner_rank[3] += 2.0
-            loser_rank[1] -= 1.0
-            loser_rank[3] -= 1.0
-        elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_2: # higher ranked player wins with 4 rank gap
-            winner_rank[1] += 0.3
-            winner_rank[3] += 0.3
-            loser_rank[1] -= 0.3
-            loser_rank[3] -= 0.3
-        elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_1: # higher ranked player wins with 2 rank gap
-            winner_rank[1] += 0.5
-            winner_rank[3] += 0.5
-            loser_rank[1] -= 0.5
-            loser_rank[3] -= 0.5
-        else:
-            winner_rank[1] += 1.0
-            winner_rank[3] += 1.0
-            loser_rank[1] -= 1.0
-            loser_rank[3] -= 1.0
-
-        if loser_rank[0] == self.minimum_derank and loser_rank[1] < 0: # making sure loser can't go lower than minimum rank
-            loser_rank[3] = round(0.0 - (loser_rank[1] - loser_rank[3]), 1)
-            loser_rank[1] = 0.0
-            
+        winner_new_rating, winner_new_rd, winner_new_volatility = self.glicko_update_rating(winner_rating, winner_rd, winner_volatility, [loser_rating], [loser_rd], [1], p1_elapsed_rating_periods)
+        loser_new_rating, loser_new_rd, loser_new_volatility = self.glicko_update_rating(loser_rating, loser_rd, loser_volatility, [winner_rating], [winner_rd], [0], p2_elapsed_rating_periods)
         
+        winner_rank[0] = winner_new_rating
+        winner_rank[1] = winner_new_rd
+        winner_rank[2] = winner_new_rating - winner_rating
 
-        # Rankup logic with special rules
-        if winner_rank[1] >= rankup_points:
-            can_rankup = True
-            
-            # Check special rank rules
-            if self.special_rank_up_rules and winner_rank[0] >= SPECIAL_RANK_THRESHOLD:
-                # Can only rank up by beating another high-ranked player
-                can_rankup = loser_rank[0] >= SPECIAL_RANK_THRESHOLD
-                if not can_rankup:
-                    # Reset points to rankup_points - 1 if can't rank up
-                    winner_rank[3] = round((rankup_points - 0.1) - (winner_rank[1] - winner_rank[3]), 1) # max points before rankup - initial points
-                    winner_rank[1] = rankup_points - 0.1
-                    winner_rank[4] = True
-            
-            if can_rankup:
-                winner_rank[0] += 1
-                winner_rank[2] = True
-                winner_rank[1] = winner_rank[1] % rankup_points if self.point_rollover else 0.0
-                rankup = True
+        loser_rank[0] = loser_new_rating
+        loser_rank[1] = loser_new_rd
+        loser_rank[2] = loser_new_rating - loser_rating
+
+        # Rank thresholds are hard coded for now
+        # Rankup logic
+        winner_new_role = False
+        winner_old_role_name = self.get_role_name_by_rating(winner_rating)
+        winner_new_role_name = self.get_role_name_by_rating(winner_new_rating)
+        if winner_old_role_name != winner_new_role_name:
+            winner_new_role = True
+            winner_rank[2] = True
 
         # Rankdown logic
-        if loser_rank[1] <= RANKDOWN_POINTS:
-            loser_rank[0] -= 1
-            loser_rank[1] = DEFAULT_POINTS
+        loser_new_role = False
+        loser_old_role_name = self.get_role_name_by_rating(loser_rating)
+        loser_new_role_name = self.get_role_name_by_rating(loser_new_rating)
+        if loser_old_role_name != loser_new_role_name:
+            loser_new_role = True
             loser_rank[2] = True
-            rankdown = True
 
         # Log new scores
-        self.logger.info("New Scores")
-        self.logger.info(f"Winner : {winner['player_name']} dan {winner_rank[0]}, points {winner_rank[1]}")
-        self.logger.info(f"Loser : {loser['player_name']} dan {loser_rank[0]}, points {loser_rank[1]}")
+        self.logger.info("New Ratings")
+        self.logger.info(f"Winner : {winner['player_name']}, {winner_new_rating}±{winner_new_rd}")
+        self.logger.info(f"Loser : {loser['player_name']}, {loser_new_rating}±{loser_new_rd}")
 
         # Update database
-        self.database_cur.execute(f"UPDATE players SET dan = {winner_rank[0]}, points = {winner_rank[1]} WHERE discord_id='{winner['discord_id']}' AND character='{winner['character']}'")
-        self.database_cur.execute(f"UPDATE players SET dan = {loser_rank[0]}, points = {loser_rank[1]} WHERE discord_id='{loser['discord_id']}' AND character='{loser['character']}'")
+        self.database_cur.execute(f"UPDATE players SET glicko_rating = {winner_new_rating}, glicko_rd = {winner_new_rd}, glicko_volatility = {winner_new_volatility} WHERE discord_id='{winner['discord_id']}' AND character='{winner['character']}'")
+        self.database_cur.execute(f"UPDATE players SET glicko_rating = {loser_new_rating}, glicko_rd = {loser_new_rd}, glicko_volatility = {loser_new_volatility} WHERE discord_id='{loser['discord_id']}' AND character='{loser['character']}'")
         self.database_con.commit()
 
         # Update roles on rankup/down
-        if rankup:
+        if winner_new_role:
             self.logger.debug(f"Winning player ranked up, attempting to assign roles")
-            dan = self.get_players_highest_dan(winner['player_name'])
-            self.logger.debug(f"Winning player's highest character dan is {dan}, rankup dan is {winner_rank[0]}")
-            if dan and dan == winner_rank[0]: # it's their highest ranked character that just ranked up, since the table is updated first we check for equality
-                role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0]}")
+            highest_rating = self.get_players_highest_rating(winner['player_name'])
+            if highest_rating and highest_rating < winner_new_rating: # highest rating they have, role may be duplicate though
+                role = discord.utils.get(ctx.guild.roles, name=winner_new_role_name)
+                old_role = discord.utils.get(ctx.guild.roles, name=highest_rating)
                 member = ctx.guild.get_member(winner['discord_id'])
                 bot_member = ctx.guild.get_member(self.bot.user.id)
-                if role and self.can_manage_role(bot_member, role):
-                    await member.add_roles(role)
-                role = discord.utils.get(ctx.guild.roles, name=f"Dan {winner_rank[0] - 1}") # this could cause issues, but should be fine as long as you can't rank up twice in one game (which cant happen)
-                if role and self.can_manage_role(bot_member, role):
-                    await member.remove_roles(role)
 
-        if rankdown:
-            self.logger.debug(f"Losing player ranked down, attempting to assign roles")
-            dan = self.get_players_highest_dan(loser['player_name'])
-            self.logger.debug(f"Winning player's highest character dan is {dan}, rankdown dan is {loser_rank[0]}")
-            if dan and dan == loser_rank[0]: # same as above, hopefully
-                role = discord.utils.get(ctx.guild.roles, name=f"Dan {loser_rank[0]}")
-                member = ctx.guild.get_member(loser['discord_id'])
-                bot_member = ctx.guild.get_member(self.bot.user.id)
-                if role and self.can_manage_role(bot_member, role):
+                if role and old_role and role != old_role and self.can_manage_role(bot_member, role):
                     await member.add_roles(role)
-                role = discord.utils.get(ctx.guild.roles, name=f"Dan {loser_rank[0] + 1}") # this could cause issues, but should be fine as long as you can't rank up twice in one game (which cant happen)
-                if role and self.can_manage_role(bot_member, role):
-                    await member.remove_roles(role)
+                    await member.remove_roles(old_role)
+
+        if loser_new_role:
+            self.logger.debug(f"Losing player ranked down, attempting to assign roles")
+            highest_rating = self.get_players_highest_rating(loser['player_name'])
+            if highest_rating and (highest_rating == loser_new_rating or loser_new_role_name == self.get_role_name_by_rating(highest_rating)): # have to deal with the case where new rating is less than higest rating, but still goes below the threshold of a rating bracket
+                role = discord.utils.get(ctx.guild.roles, name=loser_new_role_name)
+                old_role = discord.utils.get(ctx.guild.roles, name=loser_old_role_name)
+                member = ctx.guild.get_member(winner['discord_id'])
+                bot_member = ctx.guild.get_member(self.bot.user.id)
+
+                if role and old_role and role != old_role and self.can_manage_role(bot_member, role):
+                    await member.add_roles(role)
+                    await member.remove_roles(old_role)
 
         return winner_rank, loser_rank
 
@@ -272,8 +242,9 @@ class Ranked(commands.Cog):
     async def set_rank(self, ctx : discord.ApplicationContext,
                         player_name :  discord.Option(str, autocomplete=player_autocomplete),
                         char : discord.Option(str, name="character", autocomplete=character_autocomplete),
-                        dan :  discord.Option(int),
-                        points : discord.Option(float)):
+                        glicko_rating :  discord.Option(int),
+                        glicko_rd : discord.Option(float, required=False),
+                        glicko_volatility : discord.Option(float, required=False)):
 
         char = self.convert_character_alias(char)
         if not self.is_valid_char(char):
@@ -283,11 +254,11 @@ class Ranked(commands.Cog):
         # sync role stuff
         role_removed = False
         discord_id = None
-        res = self.database_cur.execute(f"SELECT dan, users.discord_id AS discord_id FROM users JOIN players ON players.discord_id = users.discord_id WHERE player_name='{player_name}' AND character='{char}'").fetchone()
+        res = self.database_cur.execute(f"SELECT glicko_rating, users.discord_id AS discord_id FROM users JOIN players ON players.discord_id = users.discord_id WHERE player_name='{player_name}' AND character='{char}'").fetchone()
         if res: 
             discord_id = res['discord_id']
-            if res['dan'] == self.get_players_highest_dan(player_name) or dan > self.get_players_highest_dan(player_name): # if this is the player's highest ranked character being updated, we need to remove the corresponding dan role
-                role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(player_name)}")
+            if res['glicko_rating'] == self.get_players_highest_rating(player_name) or glicko_rating > self.get_players_highest_rating(player_name): # if this is the player's highest ranked character being updated, we need to remove the corresponding dan role
+                role = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(res['glicko_rating']))
                 member = ctx.guild.get_member(res['discord_id'])
                 bot_member = ctx.guild.get_member(self.bot.user.id)
                 if role and self.can_manage_role(bot_member, role):
@@ -296,17 +267,19 @@ class Ranked(commands.Cog):
         else:
             await ctx.respond(f"Database entry for player {player} on character {char} not found.")
         
-        self.database_cur.execute(f"UPDATE players SET dan = {dan}, points = {points} WHERE discord_id='{discord_id}' AND character='{char}'")
+        update_glicko_rd = f"glicko_rd = {glicko_rd}, " if glicko_rd is not None else ""
+        update_glicko_volatility = f"glicko_volatility = {glicko_volatility}, " if glicko_volatility is not None else ""
+        self.database_cur.execute(f"UPDATE players SET {update_glicko_rd}{update_glicko_volatility}glicko_rating = {glicko_rating} WHERE discord_id='{discord_id}' AND character='{char}'")
         self.database_con.commit()
 
-        if role_removed and self.get_players_highest_dan(player_name) is not None:
-            role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(player_name)}")
+        if role_removed and self.get_players_highest_rating(player_name) is not None:
+            role = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(self.get_players_highest_rating(player_name)))
             member = ctx.guild.get_member(res['discord_id'])
             bot_member = ctx.guild.get_member(self.bot.user.id)
             if role and self.can_manage_role(bot_member, role):
                 await member.add_roles(role)
 
-        await ctx.respond(f"{player_name}'s {char} rank updated to be Dan {dan}, {round(points, 1):.1f} points.")
+        await ctx.respond(f"{player_name}'s {char} rank updated to be {glicko_rating}{f"±{glicko_rd}" if glicko_rd is not None else ""}{f", volatility={glicko_volatility}" if glicko_volatility is not None else ""}.")
 
     @discord.commands.slash_command(description="Displays a help message and a list of commands.")
     async def help(self, ctx : discord.ApplicationContext):
@@ -393,9 +366,9 @@ class Ranked(commands.Cog):
 
 
         # Insert the new player record
-        line = (ctx.author.id, char1, DEFAULT_DAN, DEFAULT_POINTS)
+        line = (ctx.author.id, char1, self.default_rating, self.default_rd, self.default_volatility, int(time()))
         self.database_cur.execute(
-            "INSERT INTO players (discord_id, character, dan, points) VALUES (?, ?, ?, ?)", 
+            "INSERT INTO players (discord_id, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_period) VALUES (?, ?, ?, ?, ?, ?)", 
             line
         )
         self.database_con.commit()
@@ -407,14 +380,14 @@ class Ranked(commands.Cog):
             role_list.append(char_role)
         self.logger.info(f"Adding to db {player_name} {char1}")
 
-        highest_dan = self.get_players_highest_dan(player_name)
-        self.logger.info(f"Registering player's highest dan is {highest_dan}")
-        if not highest_dan or highest_dan == 1:
-            dan_role = discord.utils.get(ctx.guild.roles, name="Dan 1")
+        highest_rating = self.get_players_highest_rating(player_name)
+        self.logger.info(f"Registering player's highest dan is {highest_rating}")
+        if highest_rating and highest_rating == self.default_rating:
+            dan_role = discord.utils.get(ctx.guild.roles, name="新人") # TODO: refactor for configable roles
             if dan_role:
                 role_list.append(dan_role)
 
-        participant_role = discord.utils.get(ctx.guild.roles, name="Danisen Participant")
+        participant_role = discord.utils.get(ctx.guild.roles, name="Ranked Bot Participant")
         if participant_role:
             role_list.append(participant_role)
 
@@ -428,13 +401,13 @@ class Ranked(commands.Cog):
         if regged_chars > 0:
             await ctx.respond(
                 f"You are now registered as {player_name}{" " + player_nickname if player_nickname else ""} with {char1}!\n"
-                f"You have registered {regged_chars+1}/3 characters to the Danisen. Have fun!"
+                f"You have registered {regged_chars+1}/3 characters. Have fun!"
             )
         else:
             await ctx.respond(
                 f"You are now registered as {player_name}{" " + player_nickname if player_nickname else ""} with {char1}!\n"
                 "If you wish to add more characters, you can register with up to 3 different characters!\n\n"
-                "Welcome to the Danisen!"
+                "Welcome to the BBCF ranked ladder!"
             )
 
     @discord.commands.slash_command(description="Unregister a character from the Danisen database. Note this will reset dan and points.")
@@ -474,16 +447,21 @@ class Ranked(commands.Cog):
             role_list.append(discord.utils.get(ctx.guild.roles, name=char1))
         self.logger.info(f"Removing role {char1} from member")
 
-        # TODO: Check if player should lose a role
+        unregged_character_role_name = self.get_role_name_by_rating(daniel['glicko_rating'])
+        best_chararcter_role_name = None
+        if self.get_players_highest_rating(ctx.author.name):
+            best_character_role_name = self.get_role_name_by_rating(self.get_players_highest_rating(ctx.author.name))
         role = None
+        if unregged_character_role_name != best_chararcter_role_name and (not self.get_players_highest_rating(ctx.author.name) or (self.get_players_highest_rating(ctx.author.name) and daniel['glicko_rating'] > self.get_players_highest_rating(ctx.author.name))):
+            role = discord.utils.get(ctx.guild.roles, name=unregged_character_role_name)
         if role:
             role_list.append(role)
 
         res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id=?", (ctx.author.id,)).fetchone()
         if res is None:
-            participant_role = discord.utils.get(ctx.guild.roles, name="Danisen Participant")
-            if char_role:
-                role_list.append(discord.utils.get(ctx.guild.roles, name="Danisen Participant"))
+            participant_role = discord.utils.get(ctx.guild.roles, name="Ranked Bot Participant")
+            if participant_role:
+                role_list.append(participant_role)
  
         bot_member = ctx.guild.get_member(self.bot.user.id)
         can_remove_roles = True
@@ -498,8 +476,8 @@ class Ranked(commands.Cog):
                 message_text += f"Could not remove roles due to bot's role being too low\n\n"
                 self.logger.warning(f"Could not remove roles due to bot's role being too low")
         
-        if self.get_players_highest_dan(ctx.author.name):
-            role = discord.utils.get(ctx.guild.roles, name=f"Dan {self.get_players_highest_dan(ctx.author.name)}")
+        if self.get_players_highest_rating(ctx.author.name):
+            role = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(self.get_players_highest_rating(ctx.author.name)))
             member = ctx.author
             bot_member = ctx.guild.get_member(self.bot.user.id)
             if role and self.can_manage_role(bot_member, role):
@@ -508,40 +486,41 @@ class Ranked(commands.Cog):
         message_text += f"You have now unregistered {char1}"
         await ctx.respond(message_text)
 
-    #rank command to get discord_name's player rank, (can also ignore 2nd param for own rank)
-    @discord.commands.slash_command(description="Get your character rank/Put in a players name to get their character rank!")
-    async def rank(self, ctx : discord.ApplicationContext,
-                char : discord.Option(str, name="character", autocomplete=character_autocomplete),
-                discord_name :  discord.Option(str, required=False, autocomplete=player_autocomplete)):
+    # Commented out for now, no need to do /rank when you can do /profile for someone
+    # #rank command to get discord_name's player rank, (can also ignore 2nd param for own rank)
+    # @discord.commands.slash_command(description="Get your character rank/Put in a players name to get their character rank!")
+    # async def rank(self, ctx : discord.ApplicationContext,
+    #             char : discord.Option(str, name="character", autocomplete=character_autocomplete),
+    #             discord_name :  discord.Option(str, required=False, autocomplete=player_autocomplete)):
 
-        char = self.convert_character_alias(char)
-        if not self.is_valid_char(char):
-            await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
-            return
+    #     char = self.convert_character_alias(char)
+    #     if not self.is_valid_char(char):
+    #         await ctx.respond(f"Invalid char selected {char}. Please choose a valid char.")
+    #         return
     
-        if not discord_name:
-            discord_name = ctx.author.name
+    #     if not discord_name:
+    #         discord_name = ctx.author.name
 
-        members = ctx.guild.members
-        member = None
-        for m in members:
-            if discord_name.lower() == m.name.lower():
-                member = m
-                break
-        if discord_name:
-            if not member:
-                await ctx.respond(f"""{discord_name} isn't a member of this server""")
-                return
-        else:
-            member = ctx.author
-        id = member.id
+    #     members = ctx.guild.members
+    #     member = None
+    #     for m in members:
+    #         if discord_name.lower() == m.name.lower():
+    #             member = m
+    #             break
+    #     if discord_name:
+    #         if not member:
+    #             await ctx.respond(f"""{discord_name} isn't a member of this server""")
+    #             return
+    #     else:
+    #         member = ctx.author
+    #     id = member.id
 
-        res = self.database_cur.execute(f"SELECT dan, points, nickname FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={id} AND character='{char}'")
-        data = res.fetchone()
-        if data:
-            await ctx.respond(f"""{data['player_name']}'s rank for {char} is Dan {data['dan']}, {round(data['points'], 1):.1f} points""")
-        else:
-            await ctx.respond(f"""{member.name} is not registered as {char}.""")
+    #     res = self.database_cur.execute(f"SELECT dan, points, nickname FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={id} AND character='{char}'")
+    #     data = res.fetchone()
+    #     if data:
+    #         await ctx.respond(f"""{data['player_name']}'s rank for {char} is Dan {data['dan']}, {round(data['points'], 1):.1f} points""")
+    #     else:
+    #         await ctx.respond(f"""{member.name} is not registered as {char}.""")
 
     #leaves the matchmaking queue
     @discord.commands.slash_command(name="leavequeue", description="leave the danisen queue")
@@ -579,7 +558,7 @@ class Ranked(commands.Cog):
                 await ctx.respond("You are not in queue.")
 
     #joins the matchmaking queue
-    @discord.commands.slash_command(name="joinqueue", description="queue up for danisen games")
+    @discord.commands.slash_command(name="joinqueue", description="queue up for rated games")
     async def join_queue(self, ctx : discord.ApplicationContext,
                     char: discord.Option(str, autocomplete=character_autocomplete)):
         await ctx.defer()
@@ -597,7 +576,7 @@ class Ranked(commands.Cog):
             return
 
         #Check if valid character
-        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, dan, points FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={discord_id} AND character='{char}'")
+        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_period FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={discord_id} AND character='{char}'")
         daniel = res.fetchone()
         if daniel == None:
             await ctx.respond(f"You are not registered with that character")
@@ -634,7 +613,6 @@ class Ranked(commands.Cog):
                 self.in_queue[str(discord_id)+"@"+char][0] = True
             self.in_match.setdefault(str(discord_id)+"@"+char, False)
 
-            self.dans_in_queue[daniel['dan']].append(daniel)
             self.matchmaking_queue.append(daniel)
             queue_add_success = True
         
@@ -653,8 +631,8 @@ class Ranked(commands.Cog):
         if self.queue_status == False:
             return
 
-        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, dan, points FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={player['discord_id']} AND character='{player['character']}'")
-        db_player = res.fetchone()
+        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_period FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={player['discord_id']} AND character='{player['character']}'")
+        daniel = res.fetchone()
         if not db_player:
             return  # Exit if the player is not found in the database
 
@@ -669,7 +647,6 @@ class Ranked(commands.Cog):
                 self.in_queue[str(player['discord_id'])+"@"+player['character']] = [False, deque(maxlen=self.recent_opponents_limit)]
 
             self.in_queue[str(player['discord_id'])+"@"+player['character']][0] = True
-            self.dans_in_queue[player['dan']].append(player)  # Append the transformed player
             self.matchmaking_queue.append(player)
 
         await self.begin_matchmaking_timer(interaction, 30) # Attempt to restart the timer, if it's stopped
@@ -684,7 +661,7 @@ class Ranked(commands.Cog):
         for player in self.matchmaking_queue:
             if player:
                 em.add_field(name=f"{player['nickname']} ({player['character']})", 
-                        value=f"Dan {player['dan']}, {round(player['points'], 1):.1f} points", 
+                        value=f"{player['glicko_rating']}±{player['glicko_rd']} rating", 
                         inline=False) 
         
         await ctx.send_response(embed=em)
@@ -707,7 +684,6 @@ class Ranked(commands.Cog):
         while (self.cur_active_matches < self.max_active_matches and
                len(self.matchmaking_queue) >= 2):
             self.logger.debug(f"Starting matchmaking loop. Current matchmaking_queue: {list(self.matchmaking_queue)}")
-            self.logger.debug(f"Current dans_in_queue: { {dan: list(queue) for dan, queue in self.dans_in_queue.items()} }")
 
             daniel1 = self.matchmaking_queue.popleft()  # Pop from the left of the deque
             self.logger.debug(f"Dequeued daniel1 from matchmaking_queue: {daniel1}")
@@ -718,93 +694,62 @@ class Ranked(commands.Cog):
 
             self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][0] = False
 
-            same_daniel = self.dans_in_queue[daniel1['dan']].popleft()  # Pop from the left of the deque
-            self.logger.debug(f"Dequeued same_daniel from dans_in_queue[{daniel1['dan']}]: {same_daniel}")
-
-            # Sanity check that this is also the latest daniel in the respective dan queue
-            if daniel1 != same_daniel:
-                self.logger.error(f"Queue desynchronization detected: daniel1={daniel1} same_daniel={same_daniel}")
-                self.logger.debug(f"Remaining matchmaking_queue: {list(self.matchmaking_queue)}")
-                self.logger.debug(f"Remaining dans_in_queue[{daniel1['dan']}]: {list(self.dans_in_queue[daniel1['dan']])}")
-                return
-
-            check_dan = [daniel1['dan']]
-            for dan_offset in range(1, self.total_dans):
-                cur_dan = check_dan[0] + dan_offset
-                if DEFAULT_DAN <= cur_dan <= self.total_dans:
-                    check_dan.append(cur_dan)
-                cur_dan = check_dan[0] - dan_offset
-                if DEFAULT_DAN <= cur_dan <= self.total_dans:
-                    check_dan.append(cur_dan)
+            check_queue_member = [player for player in self.matchmaking_queue]
+            check_queue_member.sort(key=lambda x: abs(x['glicko_rating'] - daniel1['glicko_rating'])) # sort players by difference in rating
+            check_queue_member = deque(check_queue_member) # need to convert to deque for popleft
+            self.logger.debug(f"queue to check is {check_queue_member}")
 
             old_daniels = []  # List to track multiple old_daniel instances
             matchmade = False
-            for dan in check_dan:
-                self.logger.debug(f"Checking dan queue for dan {dan}: {list(self.dans_in_queue[dan])}")
-                while self.dans_in_queue[dan]:  # Continue checking the same dan queue
-                    daniel2 = self.dans_in_queue[dan].popleft()
-                    self.logger.debug(f"Dequeued daniel2 from dans_in_queue[{dan}]: {daniel2}")
+            while check_queue_member:  # Continue checking the same dan queue
+                daniel2 = check_queue_member.popleft()
+                self.logger.debug(f"Dequeued daniel2 from check_queue_member: {daniel2}")
 
-                    self.logger.debug(f"player identifier: {str(daniel2['discord_id'])+"@"+daniel2['character']}, daniel1 recent: {self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]}")
-                    if daniel2['discord_id'] in self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1] or daniel1['discord_id'] in self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][1]:
-                        self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents, or vice versa.")
-                        old_daniels.append(daniel2)
-                        continue
-                    
-                    if daniel2['discord_id'] == daniel1['discord_id']:
-                        self.logger.debug(f"Skipping daniel2 {daniel2} as they are the same user on different characters.")
-                        old_daniels.append(daniel2)
-                        continue
+                self.logger.debug(f"player identifier: {str(daniel2['discord_id'])+"@"+daniel2['character']}, daniel1 recent: {self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1]}")
+                if daniel2['discord_id'] in self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1] or daniel1['discord_id'] in self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][1]:
+                    self.logger.debug(f"Skipping daniel2 {daniel2} as they are in daniel1's recent opponents, or vice versa.")
+                    continue
+                
+                if daniel2['discord_id'] == daniel1['discord_id']:
+                    self.logger.debug(f"Skipping daniel2 {daniel2} as they are the same user on different characters.")
+                    continue
 
-                    if daniel2['discord_id'] in self.in_match and self.in_match[daniel2['discord_id']]:
-                        self.logger.debug(f"Skipping daniel2 {daniel2} as they are currently in a match as a different character.")
-                        old_daniels.append(daniel2)
-                        continue
+                if daniel2['discord_id'] in self.in_match and self.in_match[daniel2['discord_id']]:
+                    self.logger.debug(f"Skipping daniel2 {daniel2} as they are currently in a match as a different character.")
+                    continue
 
-                    if daniel1['discord_id'] in self.in_match and self.in_match[daniel1['discord_id']]:
-                        self.logger.debug(f"Skipping daniel1 chosen from queue {daniel1} as they are currently in a match as a different character.")
-                        old_daniels.append(daniel2)
-                        continue
+                if daniel1['discord_id'] in self.in_match and self.in_match[daniel1['discord_id']]:
+                    self.logger.debug(f"Skipping daniel1 chosen from queue {daniel1} as they are currently in a match as a different character.")
+                    continue
 
-                    # This is an old implementation but I'm keeping it here in case the new one breaks
-                    # self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([str(daniel1['discord_id'])+"@"+daniel1['character']], maxlen=self.recent_opponents_limit)] # why does this do this instead of just mutate
-                    # self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(str(daniel2['discord_id'])+"@"+daniel2['character'])
+                # This is an old implementation but I'm keeping it here in case the new one breaks
+                # self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([str(daniel1['discord_id'])+"@"+daniel1['character']], maxlen=self.recent_opponents_limit)] # why does this do this instead of just mutate
+                # self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(str(daniel2['discord_id'])+"@"+daniel2['character'])
 
-                    if str(daniel2['discord_id'])+"@"+daniel2['character'] in self.in_queue:
-                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][0] = False
-                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][1].append(daniel1['discord_id'])
-                    else:
-                        self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([daniel1['discord_id']], maxlen=self.recent_opponents_limit)]
+                if str(daniel2['discord_id'])+"@"+daniel2['character'] in self.in_queue:
+                    self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][0] = False
+                    self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']][1].append(daniel1['discord_id'])
+                else:
+                    self.in_queue[str(daniel2['discord_id'])+"@"+daniel2['character']] = [False, deque([daniel1['discord_id']], maxlen=self.recent_opponents_limit)]
 
-                    self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(daniel2['discord_id'])
+                self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][1].append(daniel2['discord_id'])
 
-                    # Clean up the main queue for players that have already been matched
-                    for idx in reversed(range(len(self.matchmaking_queue))):
-                        player = self.matchmaking_queue[idx]
-                        if player and (player['discord_id'] == daniel2['discord_id']) and (player['character'] == daniel2['character']):
-                            self.logger.debug(f"Removing matched player {player} from matchmaking_queue.")
-                            self.matchmaking_queue[idx] = None
+                # Clean up the main queue for players that have already been matched
+                for idx in reversed(range(len(self.matchmaking_queue))):
+                    player = self.matchmaking_queue[idx]
+                    if player and (player['discord_id'] == daniel2['discord_id']) and (player['character'] == daniel2['character']):
+                        self.logger.debug(f"Removing matched player {player} from matchmaking_queue.")
+                        self.matchmaking_queue[idx] = None
 
-                    self.in_match[daniel1['discord_id']] = True
-                    self.in_match[daniel2['discord_id']] = True
-                    matchmade = True
-                    await self.create_match_interaction(ctx, daniel1, daniel2)
-                    break
-
-                if matchmade:
-                    break
-
-            # Re-add all skipped old_daniels back into the queue
-            self.logger.debug(f"Current matchmaking round finished, adding old_daniels {old_daniels} back into their dan queues")
-            for old_daniel in reversed(old_daniels):
-                self.logger.debug(f"Re-adding skipped daniel {old_daniel} back to dans_in_queue[{old_daniel['dan']}].")
-                self.dans_in_queue[old_daniel['dan']].appendleft(old_daniel)
-                self.in_queue[str(old_daniel['discord_id'])+"@"+old_daniel['character']][0] = True
+                self.in_match[daniel1['discord_id']] = True
+                self.in_match[daniel2['discord_id']] = True
+                matchmade = True
+                await self.create_match_interaction(ctx, daniel1, daniel2)
+                break
 
             if not matchmade:
                 self.logger.debug(f"No match found for daniel1 {daniel1}. Re-adding to queues.")
                 self.matchmaking_queue.append(daniel1)  # Append back to the deque
-                self.dans_in_queue[daniel1['dan']].append(daniel1)  # Append back to the deque
                 self.in_queue[str(daniel1['discord_id'])+"@"+daniel1['character']][0] = True
                 match_attempts += 1  # Since we can have multiple players on different chars, we have to check at least half(?) the queue
                 if match_attempts > (len(self.in_queue) // 2):
@@ -838,7 +783,7 @@ class Ranked(commands.Cog):
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
         active_match_msg = None
         if channel:
-            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']} {self.emoji_mapping[daniel1['character']]}{p1_alert} (Dan {daniel1['dan']}, {round(daniel1['points'], 1)} points) vs {daniel2['nickname']}'s {daniel2['character']} {self.emoji_mapping[daniel2['character']]}{p2_alert} (Dan {daniel2['dan']}, {round(daniel2['points'], 1)} points).{" Room pw is `" + room_keyword[0] + "`." if room_keyword[0] else ""}")
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']}{self.emoji_mapping[daniel1['character']]}{p1_alert} ({daniel1['glicko_rating']}±{daniel1['glicko_rd']} rating) vs {daniel2['nickname']}'s {daniel2['character']}{self.emoji_mapping[daniel2['character']]}{p2_alert} ({daniel2['glicko_rating']}±{daniel2['glicko_rd']} rating).{" Room pw is `" + room_keyword[0] + "`." if room_keyword[0] else ""}")
         else:
             await ctx.respond(
                 f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
@@ -853,7 +798,7 @@ class Ranked(commands.Cog):
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} (Dan {daniel1['dan']}, {round(daniel1['points'], 1):.1f} points) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} (Dan {daniel2['dan']}, {round(daniel2['points'], 1):.1f} points) {self.emoji_mapping[daniel2['character']]}" +\
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} ({daniel1['glicko_rating']}±{daniel1['glicko_rd']} rating) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} ({daniel2['glicko_rating']}±{daniel2['glicko_rd']} rating) {self.emoji_mapping[daniel2['character']]}" +\
                 (f"\n\nThe room host will be {[id1, id2][room_keyword[1]]}, pw `{room_keyword[0]}`." if room_keyword[0] else f"\n\nNeither player has a default room password set, please coordinate the room in <#1433545145554309233>") +\
                 "\n\nAll sets are FT3, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
@@ -903,25 +848,25 @@ class Ranked(commands.Cog):
             winner = player1['nickname']
             winner_id = player1['discord_id']
             winner_char = player1['character']
-            winner_old_dan = player1['dan']
-            winner_old_points = player1['points']
+            winner_old_rating = player1['glicko_rating']
+            winner_old_rd = player1['glicko_rd']
             loser = player2['nickname']
             loser_id = player2['discord_id']
             loser_char = player2['character']
-            loser_old_dan = player2['dan']
-            loser_old_points = player2['points']
+            loser_old_rating = player2['glicko_rating']
+            loser_old_rd = player2['glicko_rd']
         else:
             winner_rank, loser_rank = await self.score_update(ctx, player2, player1)
             winner = player2['nickname']
             winner_id = player2['discord_id']
             winner_char = player2['character']
-            winner_old_dan = player2['dan']
-            winner_old_points = player2['points']
+            winner_old_rating = player2['glicko_rating']
+            winner_old_rd = player2['glicko_rd']
             loser = player1['nickname']
             loser_id = player1['discord_id']
             loser_char = player1['character']
-            loser_old_dan = player1['dan']
-            loser_old_points = player1['points']
+            loser_old_rating = player1['glicko_rating']
+            loser_old_rd = player1['glicko_rd']
 
         self.logger.info(f"Adding match of {player1['player_name']} vs {player2['player_name']} into matches table")
         self.database_cur.execute(
@@ -930,13 +875,13 @@ class Ranked(commands.Cog):
         )
         self.database_con.commit()
 
-        rankup_message = ", Rank up!" if winner_rank[2] else f", Unable to rank up, must beat an opponent Dan {SPECIAL_RANK_THRESHOLD} or higher." if winner_rank[4] else ""
-        rankdown_message = ", Rank down..." if loser_rank[2] else ""
+        rankup_message = ", Rank bracket up!" if winner_rank[2] else ""
+        rankdown_message = ", Rank bracket down..." if loser_rank[2] else ""
 
         await ctx.respond(
             f"### The match has been reported as <@{winner_id}>'s victory over <@{loser_id}>!\n"
-            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){rankup_message})\n"
-            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** ({loser_rank[3]} point(s){rankdown_message})"
+            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating}±{winner_old_rd} → **{winner_rank[0]}±{winner_rank[1]}** (+{winner_rank[3]} rating){rankup_message})\n"
+            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating}±{loser_old_rd} → **{loser_rank[0]}±{loser_rank[1]}** ({loser_rank[3]} rating){rankdown_message})"
         )
 
     #report match score for the queue
@@ -946,25 +891,25 @@ class Ranked(commands.Cog):
             winner = player1['nickname']
             winner_id = player1['discord_id']
             winner_char = player1['character']
-            winner_old_dan = player1['dan']
-            winner_old_points = player1['points']
+            winner_old_rating = player1['glicko_rating']
+            winner_old_rd = player1['glicko_rd']
             loser = player2['nickname']
             loser_id = player2['discord_id']
             loser_char = player2['character']
-            loser_old_dan = player2['dan']
-            loser_old_points = player2['points']
+            loser_old_rating = player2['glicko_rating']
+            loser_old_rd = player2['glicko_rd']
         else:
             winner_rank, loser_rank = await self.score_update(interaction, player2,player1)
             winner = player2['nickname']
             winner_id = player2['discord_id']
             winner_char = player2['character']
-            winner_old_dan = player2['dan']
-            winner_old_points = player2['points']
+            winner_old_rating = player2['glicko_rating']
+            winner_old_rd = player2['glicko_rd']
             loser = player1['nickname']
             loser_id = player1['discord_id']
             loser_char = player1['character']
-            loser_old_dan = player1['dan']
-            loser_old_points = player1['points']
+            loser_old_rating = player1['glicko_rating']
+            loser_old_rd = player1['glicko_rd']
 
         self.logger.info(f"Adding match of {player1['player_name']} vs {player2['player_name']} into matches table")
         self.database_cur.execute(
@@ -974,15 +919,15 @@ class Ranked(commands.Cog):
         self.database_con.commit()
 
         view = RequeueView(self, player1, player2)
-        rankup_message = ", Rank up!" if winner_rank[2] else f", Unable to rank up, must beat an opponent Dan {SPECIAL_RANK_THRESHOLD} or higher." if winner_rank[4] else ""
-        rankdown_message = ", Rank down..." if loser_rank[2] else ""
+        rankup_message = ", Rank bracket up!" if winner_rank[2] else ""
+        rankdown_message = ", Rank bracket down..." if loser_rank[2] else ""
 
         channel = self.bot.get_channel(self.REPORTED_MATCHES_CHANNEL_ID)
         if channel:
             await channel.send(
                 content=f"### The match has been reported as <@{winner_id}>'s victory over <@{loser_id}>!\n"
-                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: Dan {winner_old_dan}, {round(winner_old_points, 1):.1f} points → **Dan {winner_rank[0]}, {round(winner_rank[1], 1):.1f} points** (+{winner_rank[3]} point(s){rankup_message})\n"
-                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: Dan {loser_old_dan}, {round(loser_old_points, 1):.1f} points → **Dan {loser_rank[0]}, {round(loser_rank[1], 1):.1f} points** ({loser_rank[3]} point(s){rankdown_message})",
+                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating}±{winner_old_rd} → **{winner_rank[0]}±{winner_rank[1]}** (+{winner_rank[3]} rating){rankup_message})\n"
+                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating}±{loser_old_rd} → **{loser_rank[0]}±{loser_rank[1]}** ({loser_rank[3]} rating){rankdown_message})",
                 view=view
                 )
         else:
@@ -1084,7 +1029,7 @@ class Ranked(commands.Cog):
     @discord.commands.slash_command(description="See the top players")
     async def leaderboard(self, ctx: discord.ApplicationContext):
         daniels = self.database_cur.execute(
-            "SELECT nickname || '''s ' || character AS name, 'Dan ' || dan || ', ' || ROUND(points, 1) || ' points' AS value "
+            "SELECT nickname || '''s ' || character AS name, glicko_rating || '±' || glicko_rd || ' rating' AS value "
             "FROM players JOIN users ON players.discord_id = users.discord_id ORDER BY dan DESC, points DESC"
         ).fetchall()
 
@@ -1239,13 +1184,6 @@ class Ranked(commands.Cog):
         )
         return res.fetchone()
 
-    def get_players_by_dan(self, dan):
-        res = self.database_cur.execute(
-            "SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, dan, points FROM players JOIN users ON players.discord_id = users.discord_id WHERE dan=?", 
-            (dan,)
-        )
-        return res.fetchall()
-
     @discord.commands.slash_command(description="View your or another player's profile")
     async def profile(self, ctx: discord.ApplicationContext, 
                       discord_name: discord.Option(str, name="discordname", autocomplete=player_autocomplete, required=False, default=None)):
@@ -1264,7 +1202,7 @@ class Ranked(commands.Cog):
 
         # Fetch all characters for the player
         res = self.database_cur.execute(
-            "SELECT character, dan, points FROM players WHERE discord_id = ?", 
+            "SELECT character, glicko_rating, glicko_rd, glicko_volatility FROM players WHERE discord_id = ?", 
             (member.id,)
         ).fetchall()
 
@@ -1277,8 +1215,8 @@ class Ranked(commands.Cog):
             (member.id,)
         ).fetchone()
 
-        player_highest_dan = self.get_players_highest_dan(member.name)
-        dan_colour = discord.utils.get(ctx.guild.roles, name=f"Dan {player_highest_dan}").color
+        player_highest_rating = self.get_players_highest_rating(member.name)
+        dan_colour = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(player_highest_rating)).color
 
         # Create an embed to display the profile
         em = discord.Embed(
@@ -1327,13 +1265,13 @@ class Ranked(commands.Cog):
             if row['character'] in char_winrates:
                 em.add_field(
                     name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
-                    value=f"Dan {row['dan']}, {round(row['points'], 1):.1f} points. {char_winrates[row['character']][2]:.2f}% Winrate ({char_winrates[row['character']][0]}W, {char_winrates[row['character']][1]}L)", 
+                    value=f"{row['glicko_rating']}±{row['glicko_rd']} rating. {char_winrates[row['character']][2]:.2f}% Winrate ({char_winrates[row['character']][0]}W, {char_winrates[row['character']][1]}L)", 
                     inline=False
                 )
             else:
                 em.add_field(
                     name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
-                    value=f"Dan {row['dan']}, {round(row['points'], 1):.1f} points. 0.00% Winrate (0W, 0L)", 
+                    value=f"{row['glicko_rating']}±{row['glicko_rd']} rating. 0.00% Winrate (0W, 0L)", 
                     inline=False
                 )
 
@@ -1341,10 +1279,10 @@ class Ranked(commands.Cog):
 
     # Helper function
     # Returns the highest Dan rank on any character registered by this player. If the player has no characters registered, return None
-    def get_players_highest_dan(self, player_name: str):
-        res = self.database_cur.execute(f"SELECT MAX(dan) as max_dan FROM players JOIN users ON players.discord_id = users.discord_id WHERE player_name='{player_name}'").fetchone()
+    def get_players_highest_rating(self, player_name: str):
+        res = self.database_cur.execute(f"SELECT MAX(glicko_rating) as max_rating FROM players JOIN users ON players.discord_id = users.discord_id WHERE player_name='{player_name}'").fetchone()
         if res:
-            return res['max_dan']
+            return res['max_rating']
         else:
             return res
 
@@ -1405,44 +1343,46 @@ class Ranked(commands.Cog):
         await ctx.respond(f"Default room password removed.")
 
     async def check_rankup_potential(self, player1, player2):
-        # Determine rankup points based on rank type
-        rankup_points_p1 = RANKUP_POINTS_SPECIAL if player1['dan'] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
-        rankup_points_p2 = RANKUP_POINTS_SPECIAL if player2['dan'] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+        return [0,0]
+        # TODO: fix for configurable ranks
+        # # Determine rankup points based on rank type
+        # rankup_points_p1 = RANKUP_POINTS_SPECIAL if player1['dan'] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
+        # rankup_points_p2 = RANKUP_POINTS_SPECIAL if player2['dan'] >= SPECIAL_RANK_THRESHOLD else RANKUP_POINTS_NORMAL
 
-        # The return array, index 0 is p1 index 1 is p2, value of 0 means nothing, 1 means rankup chance, -1 means rankdown chance
-        ret = [0, 0]
+        # # The return array, index 0 is p1 index 1 is p2, value of 0 means nothing, 1 means rankup chance, -1 means rankdown chance
+        # ret = [0, 0]
 
-        p1_current_points = player1['points']
-        p2_current_points = player2['points']
+        # p1_current_points = player1['points']
+        # p2_current_points = player2['points']
 
-        p1_point_potential = [1.0, -1.0] #default
-        p2_point_potential = [1.0, -1.0]
+        # p1_point_potential = [1.0, -1.0] #default
+        # p2_point_potential = [1.0, -1.0]
 
-        if player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_2: # player1 four or more above player2
-            p1_point_potential = [0.3, -1]
-            p2_point_potential = [3, -0.3]
-        elif player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_1: # player1 two or three above player2
-            p1_point_potential = [0.5, -1]
-            p2_point_potential = [2, -0.5]
-        elif player2['dan'] >= player1['dan']  + self.rank_gap_for_more_points_2: # player2 four or more above player1
-            p1_point_potential = [3, -0.3]
-            p2_point_potential = [0.3, -1]
-        elif player2['dan'] >= player1['dan'] + self.rank_gap_for_more_points_1: # player2 two or three above player1
-            p1_point_potential = [2, -0.5]
-            p2_point_potential = [0.5, -1]
+        # if player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_2: # player1 four or more above player2
+        #     p1_point_potential = [0.3, -1]
+        #     p2_point_potential = [3, -0.3]
+        # elif player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_1: # player1 two or three above player2
+        #     p1_point_potential = [0.5, -1]
+        #     p2_point_potential = [2, -0.5]
+        # elif player2['dan'] >= player1['dan']  + self.rank_gap_for_more_points_2: # player2 four or more above player1
+        #     p1_point_potential = [3, -0.3]
+        #     p2_point_potential = [0.3, -1]
+        # elif player2['dan'] >= player1['dan'] + self.rank_gap_for_more_points_1: # player2 two or three above player1
+        #     p1_point_potential = [2, -0.5]
+        #     p2_point_potential = [0.5, -1]
         
 
-        # Rankup logic with special rules and Rankdown logic
-        if p1_current_points + p1_point_potential[0] >= rankup_points_p1 and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
-            ret[0] = 1
-        elif p1_current_points + p1_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
-            ret[0] = -1
-        if p2_current_points + p2_point_potential[0] >= rankup_points_p2 and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
-            ret[1] = 1
-        elif p2_current_points + p2_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
-            ret[1] = -1
+        # # Rankup logic with special rules and Rankdown logic
+        # if p1_current_points + p1_point_potential[0] >= rankup_points_p1 and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
+        #     ret[0] = 1
+        # elif p1_current_points + p1_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
+        #     ret[0] = -1
+        # if p2_current_points + p2_point_potential[0] >= rankup_points_p2 and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
+        #     ret[1] = 1
+        # elif p2_current_points + p2_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
+        #     ret[1] = -1
 
-        return ret 
+        # return ret 
 
     # Returns in format (percentage, wins, losses)
     def get_winrate_by_id(self, discord_id: int):
@@ -1533,44 +1473,44 @@ class Ranked(commands.Cog):
             return
 
     # Generates an invite link to the 
-    @discord.commands.slash_command(name="getinvite", description=f"Get a 1 use invite link once a week, usable only by higher dans")
-    async def get_invite_link(self, ctx: discord.ApplicationContext):
-        bot_member = ctx.guild.get_member(self.bot.user.id)
-        if not bot_member.guild_permissions.create_instant_invite:
-            await ctx.respond("The bot does not have the permissions to create invites")
-            return
+    # @discord.commands.slash_command(name="getinvite", description=f"Get a 1 use invite link once a week, usable only by higher dans")
+    # async def get_invite_link(self, ctx: discord.ApplicationContext):
+    #     bot_member = ctx.guild.get_member(self.bot.user.id)
+    #     if not bot_member.guild_permissions.create_instant_invite:
+    #         await ctx.respond("The bot does not have the permissions to create invites")
+    #         return
 
-        max_dan = self.get_players_highest_dan(ctx.author.name)
-        res = self.database_cur.execute(f"SELECT (UNIXEPOCH('now') - timestamp) AS timediff, UNIXEPOCH('now') AS timenow, invite_link FROM invites WHERE discord_id={ctx.author.id}").fetchone()
-        if max_dan and max_dan >= self.minimum_invite_dan:
-            if not res:
-                self.logger.debug(f"User {ctx.author.name} not in invites table, generating link and adding")
-                welcome_channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
-                created_invite = await welcome_channel.create_invite(max_age=604800, max_uses=1, unique=True, reason=f"Created by user {ctx.author.name} with /getinvite")
-                self.database_cur.execute(f"INSERT INTO invites (discord_id, invite_link, timestamp) VALUES (?, ?, UNIXEPOCH('now'))", (ctx.author.id, created_invite.url))
-                self.database_con.commit()
-                await ctx.respond(f"New invite link generated: {created_invite.url}. You will be able to recieve another link <t:{int(time()) + 604800}:R>, the original link will also expire at that time. You can use this command at any time to check the generated link.", ephemeral=True)
-                return
-            elif (res and res['timediff'] >= 604800): 
-                self.logger.debug(f"User {ctx.author.name} found in invites table, generating link and updating.")
-                welcome_channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
-                created_invite = await welcome_channel.create_invite(max_age=604800, max_uses=1, unique=True, reason=f"Created by user {ctx.author.name} with /getinvite")
-                self.database_cur.execute(f"UPDATE invites SET invite_link='{created_invite.url}', timestamp=UNIXEPOCH('now') WHERE discord_id={ctx.author.id}")
-                self.database_con.commit()
-                await ctx.respond(f"New invite link generated: {created_invite.url}. You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>, the original link will also expire at that time. You can use this command at any time to check the generated link.", ephemeral=True)
-                return
-            elif res:
-                await ctx.respond(f"You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>. Your last invite link was: {res['invite_link']}.", ephemeral=True)
-                return
-        elif (res and res['timediff'] < 604800):
-            await ctx.respond(f"You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>. Your last invite link was: {res['invite_link']}.", ephemeral=True)
-            return
-        elif res:
-            await ctx.respond(f"Your last invite link has expired, and you are no longer a high enough Dan (Dan {self.minimum_invite_dan}+) to generate a new invite link.", ephemeral=True)
-            return
-        else:
-            await ctx.respond(f"This command is only available for players Dan {self.minimum_invite_dan} and above.", ephemeral=True)
-            return
+    #     max_dan = self.get_players_highest_dan(ctx.author.name)
+    #     res = self.database_cur.execute(f"SELECT (UNIXEPOCH('now') - timestamp) AS timediff, UNIXEPOCH('now') AS timenow, invite_link FROM invites WHERE discord_id={ctx.author.id}").fetchone()
+    #     if max_dan and max_dan >= self.minimum_invite_dan:
+    #         if not res:
+    #             self.logger.debug(f"User {ctx.author.name} not in invites table, generating link and adding")
+    #             welcome_channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
+    #             created_invite = await welcome_channel.create_invite(max_age=604800, max_uses=1, unique=True, reason=f"Created by user {ctx.author.name} with /getinvite")
+    #             self.database_cur.execute(f"INSERT INTO invites (discord_id, invite_link, timestamp) VALUES (?, ?, UNIXEPOCH('now'))", (ctx.author.id, created_invite.url))
+    #             self.database_con.commit()
+    #             await ctx.respond(f"New invite link generated: {created_invite.url}. You will be able to recieve another link <t:{int(time()) + 604800}:R>, the original link will also expire at that time. You can use this command at any time to check the generated link.", ephemeral=True)
+    #             return
+    #         elif (res and res['timediff'] >= 604800): 
+    #             self.logger.debug(f"User {ctx.author.name} found in invites table, generating link and updating.")
+    #             welcome_channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
+    #             created_invite = await welcome_channel.create_invite(max_age=604800, max_uses=1, unique=True, reason=f"Created by user {ctx.author.name} with /getinvite")
+    #             self.database_cur.execute(f"UPDATE invites SET invite_link='{created_invite.url}', timestamp=UNIXEPOCH('now') WHERE discord_id={ctx.author.id}")
+    #             self.database_con.commit()
+    #             await ctx.respond(f"New invite link generated: {created_invite.url}. You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>, the original link will also expire at that time. You can use this command at any time to check the generated link.", ephemeral=True)
+    #             return
+    #         elif res:
+    #             await ctx.respond(f"You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>. Your last invite link was: {res['invite_link']}.", ephemeral=True)
+    #             return
+    #     elif (res and res['timediff'] < 604800):
+    #         await ctx.respond(f"You will be able to recieve another link <t:{(604800 - res['timediff']) + res['timenow']}:R>. Your last invite link was: {res['invite_link']}.", ephemeral=True)
+    #         return
+    #     elif res:
+    #         await ctx.respond(f"Your last invite link has expired, and you are no longer a high enough Dan (Dan {self.minimum_invite_dan}+) to generate a new invite link.", ephemeral=True)
+    #         return
+    #     else:
+    #         await ctx.respond(f"This command is only available for players Dan {self.minimum_invite_dan} and above.", ephemeral=True)
+    #         return
 
     # Returns the character if an alias is found, otherwise returns the input
     def convert_character_alias(self, character: str):
@@ -1660,7 +1600,7 @@ class Ranked(commands.Cog):
             big_b = big_c
             big_b_func_res = big_c_func_res
 
-        return math.pow(math.2, (big_a / 2))
+        return math.pow(math.e, (big_a / 2))
 
     def glicko_volatility_f_helper(self, x: float, a: float, phi: float, delta: float, v: float):
         return ((math.pow(math.e, x) * (math.pow(delta, 2) - math.pow(phi, 2) - v - math.pow(math.e, x))) / (2 * math.pow((math.pow(phi, 2) + v + math.pow(math.e, x)), 2))) - ((x - a) / math.pow(self.tau, 2))
@@ -1679,6 +1619,42 @@ class Ranked(commands.Cog):
             g_res = self.glicko_g(opponent_phis[i])
             mu_sum += g_res * (game_outcomes[i] - E_res)
         mu_prime = mu + math.pow(phi_prime, 2) * mu_sum
+        return phi_prime, mu_prime
+
+    # Wrapper for the entire glicko-2 calculation
+    # game outcomes must be either 0, 1, or 0.5 for loss, win and tie respectively
+    # returns rating, rd, volatility
+    def glicko_update_rating(self, player_rating: float, player_rd: float, player_volatility: float, opponent_ratings: list[float], opponent_rds: list[float], game_outcomes: list[float], elapsed_rating_periods: float):
+        player_mu, player_phi = self.convert_to_glicko_scale(player_rating, player_rd)
+        player_sigma = player_volatility
+        opponent_mus = [(rating - self.default_rating) / 173.7178 for rating in opponent_ratings]
+        opponent_phis = [rating / 173.7178 for rating in opponent_rds]
+        player_v = self.glicko_v(player_mu, opponent_mus, opponent_phis)
+        player_delta = self.glicko_delta(player_v, player_mu, opponent_mus, opponent_phis, game_outcomes)
+        player_sigma_prime = self.glicko_new_volatility(player_phi, player_sigma, player_delta, player_v)
+        player_phi_star = self.glicko_new_rd_star(player_phi, player_sigma_prime, elapsed_rating_periods)
+        player_phi_prime, player_mu_prime = self.glicko_new_rating_and_rd(player_phi_star, player_v, player_mu, opponent_mus, opponent_phis, game_outcomes)
+        player_new_rating, player_new_rd = self.convert_from_glicko_scale(player_mu_prime, player_phi_prime)
+        
+        return player_new_rating, player_new_rd, player_sigma_prime
+
+    # 0 ~ 1099 -> Rookie (新人/Shinjin)
+    # 1100 ~ 1249 -> Advanced (先進/Senshin) 
+    # 1250 ~ 1399 -> Expert (玄人/Kurouto) 
+    # 1400 ~ 1599 -> Ultimate (究極/Kyuukyoku)
+    # 1600+ -> Unrivaled (無敵/Muteki) 
+    def get_role_name_by_rating(self, rating: float):
+        if rating <= 1099: 
+            return "新人"
+        elif rating <= 1249:
+            return "先進"
+        elif rating <= 1399:
+            return "玄人"
+        elif rating <= 1599:
+            return "究極"
+        elif rating >= 1600:
+            return "無敵"
+
 
 
 
