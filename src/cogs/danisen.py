@@ -159,7 +159,7 @@ class Danisen(commands.Cog):
         # Update scores for a match
         # Format of [Dan, Points, Rankup?, PointDelta, RankupBlock]
         winner_rank = [winner['dan'], winner['points'], False, 0.0, False]
-        loser_rank = [loser['dan'], loser['points'], False, 0,0, False]
+        loser_rank = [loser['dan'], loser['points'], False, 0.0, False]
         rankdown = False
         rankup = False
 
@@ -1445,13 +1445,15 @@ class Danisen(commands.Cog):
             p1_point_potential = [2 * self.point_multiplier, -0.5]
             p2_point_potential = [0.5 * self.point_multiplier, -1]
         
+        self.logger.debug(f"current match point potential is {p1_point_potential}, {p2_point_potential}")
+        self.logger.debug(f"rankup vals: {p1_current_points}, {p1_point_potential}, {rankup_points_p1}, sum of first two is {p1_current_points + p1_point_potential[0]}")
 
         # Rankup logic with special rules and Rankdown logic
-        if p1_current_points + p1_point_potential[0] >= rankup_points_p1 and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
+        if p1_current_points + p1_point_potential[0] >= rankup_points_p1 and (not self.special_rank_up_rules or (self.special_rank_up_rules and ((player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD) or player1['dan'] < SPECIAL_RANK_THRESHOLD))):
             ret[0] = 1
         elif p1_current_points + p1_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
             ret[0] = -1
-        if p2_current_points + p2_point_potential[0] >= rankup_points_p2 and (not self.special_rank_up_rules or (self.special_rank_up_rules and player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD)):
+        if p2_current_points + p2_point_potential[0] >= rankup_points_p2 and (not self.special_rank_up_rules or (self.special_rank_up_rules and ((player1['dan'] >= SPECIAL_RANK_THRESHOLD and player2['dan'] >= SPECIAL_RANK_THRESHOLD) or player2['dan'] < SPECIAL_RANK_THRESHOLD))):
             ret[1] = 1
         elif p2_current_points + p2_point_potential[1] <= RANKDOWN_POINTS: # adds negative value
             ret[1] = -1
