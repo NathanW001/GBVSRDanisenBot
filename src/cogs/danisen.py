@@ -1618,6 +1618,11 @@ class Danisen(commands.Cog):
         else:
             self.logger.warning("No Danisen Status Channel")
 
+    @discord.commands.slash_command(name="setpointmultiplier", description="[Admin Command] Sets the point multiplier for the winning player")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def set_point_multiplier(self, ctx: discord.ApplicationContext, multiplier: discord.Option(float, name="multiplier", required=True)):
+        self.point_multiplier = multiplier
+        await ctx.respond(f"Point multiplier updated to be {multiplier}x")
 
     
 
