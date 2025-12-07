@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
     "rank_gap_for_more_points_2": 4,
     "recent_opponents_limit": 3,
     "point_rollover": True,
+    "point_multiplier": 1,
     "queue_status": True,
     "special_rank_up_rules": False,
     "max_active_matches": 5,

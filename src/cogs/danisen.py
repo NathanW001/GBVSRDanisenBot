@@ -112,6 +112,7 @@ class Danisen(commands.Cog):
         self.rank_gap_for_more_points_1 = config.get('rank_gap_for_more_points_1', 2)
         self.rank_gap_for_more_points_2 = config.get("rank_gap_for_more_points_2", 4)
         self.point_rollover = config.get('point_rollover', True)
+        self.point_multiplier = config.get('point_multiplier', 1)
 
         # MATCHMAKING QUEUE CONFIG
         self.queue_status = config.get('queue_status', True)
@@ -167,28 +168,28 @@ class Danisen(commands.Cog):
 
         # Winning and Losing logic
         if loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_2: # lower ranked player wins with 4 rank gap
-            winner_rank[1] += 3.0
-            winner_rank[3] += 3.0
+            winner_rank[1] += 3.0 * self.point_multiplier
+            winner_rank[3] += 3.0 * self.point_multiplier
             loser_rank[1] -= 1.0
             loser_rank[3] -= 1.0
         elif loser_rank[0] >= winner_rank[0] + self.rank_gap_for_more_points_1: # lower ranked player wins with 2 rank gap
-            winner_rank[1] += 2.0
-            winner_rank[3] += 2.0
+            winner_rank[1] += 2.0 * self.point_multiplier
+            winner_rank[3] += 2.0 * self.point_multiplier
             loser_rank[1] -= 1.0
             loser_rank[3] -= 1.0
         elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_2: # higher ranked player wins with 4 rank gap
-            winner_rank[1] += 0.3
-            winner_rank[3] += 0.3
+            winner_rank[1] += 0.3 * self.point_multiplier
+            winner_rank[3] += 0.3 * self.point_multiplier
             loser_rank[1] -= 0.3
             loser_rank[3] -= 0.3
         elif winner_rank[0] >= loser_rank[0] + self.rank_gap_for_more_points_1: # higher ranked player wins with 2 rank gap
-            winner_rank[1] += 0.5
-            winner_rank[3] += 0.5
+            winner_rank[1] += 0.5 * self.point_multiplier
+            winner_rank[3] += 0.5 * self.point_multiplier
             loser_rank[1] -= 0.5
             loser_rank[3] -= 0.5
         else:
-            winner_rank[1] += 1.0
-            winner_rank[3] += 1.0
+            winner_rank[1] += 1.0 * self.point_multiplier
+            winner_rank[3] += 1.0 * self.point_multiplier
             loser_rank[1] -= 1.0
             loser_rank[3] -= 1.0
 
@@ -1428,21 +1429,21 @@ class Danisen(commands.Cog):
         p1_current_points = player1['points']
         p2_current_points = player2['points']
 
-        p1_point_potential = [1.0, -1.0] #default
-        p2_point_potential = [1.0, -1.0]
+        p1_point_potential = [1.0 * self.point_multiplier, -1.0] #default
+        p2_point_potential = [1.0 * self.point_multiplier, -1.0]
 
         if player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_2: # player1 four or more above player2
-            p1_point_potential = [0.3, -1]
-            p2_point_potential = [3, -0.3]
+            p1_point_potential = [0.3 * self.point_multiplier, -1]
+            p2_point_potential = [3 * self.point_multiplier, -0.3]
         elif player1['dan'] >= player2['dan'] + self.rank_gap_for_more_points_1: # player1 two or three above player2
-            p1_point_potential = [0.5, -1]
-            p2_point_potential = [2, -0.5]
+            p1_point_potential = [0.5 * self.point_multiplier, -1]
+            p2_point_potential = [2 * self.point_multiplier, -0.5]
         elif player2['dan'] >= player1['dan']  + self.rank_gap_for_more_points_2: # player2 four or more above player1
-            p1_point_potential = [3, -0.3]
-            p2_point_potential = [0.3, -1]
+            p1_point_potential = [3 * self.point_multiplier, -0.3]
+            p2_point_potential = [0.3 * self.point_multiplier, -1]
         elif player2['dan'] >= player1['dan'] + self.rank_gap_for_more_points_1: # player2 two or three above player1
-            p1_point_potential = [2, -0.5]
-            p2_point_potential = [0.5, -1]
+            p1_point_potential = [2 * self.point_multiplier, -0.5]
+            p2_point_potential = [0.5 * self.point_multiplier, -1]
         
 
         # Rankup logic with special rules and Rankdown logic
