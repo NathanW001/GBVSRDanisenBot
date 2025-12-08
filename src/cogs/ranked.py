@@ -42,7 +42,7 @@ class Ranked(commands.Cog):
                                                                     f"glicko_rating FLOAT NOT NULL,"
                                                                     f"glicko_rd FLOAT NOT NULL,"
                                                                     f"glicko_volatility FLOAT NOT NULL,"
-                                                                    f"last_rating_period FLOAT NOT NULL,"
+                                                                    f"last_rating_timestamp INTEGER NOT NULL," #unix timestamp
                                                                     f"FOREIGN KEY (discord_id) REFERENCES users ON UPDATE CASCADE ON DELETE CASCADE,"
                                                                     f"PRIMARY KEY (discord_id, character)"
                                                                     f")")
@@ -57,6 +57,10 @@ class Ranked(commands.Cog):
                                                                     f"FOREIGN KEY (winner_discord_id, winner_character) REFERENCES players(discord_id, character) ON UPDATE CASCADE ON DELETE SET NULL,"
                                                                     f"FOREIGN KEY (loser_discord_id, loser_character) REFERENCES players(discord_id, character) ON UPDATE CASCADE ON DELETE SET NULL"
                                                                     f")")
+
+        self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS rating_period("
+                                                                            f"timestamp INTEGER NOT NULL" #uses unix time
+                                                                            f")")
 
         # self.database_cur.execute(f"CREATE TABLE IF NOT EXISTS invites("
         #                                                             f"discord_id INT NOT NULL,"
@@ -75,6 +79,9 @@ class Ranked(commands.Cog):
 
         # Synchronization
         self.queue_lock = asyncio.Lock()
+
+        # Confige glicko rating period
+        self.setup_rating_period()
 
     def can_manage_role(self, bot_member, role):
         # Check if the bot can manage a specific role
@@ -116,7 +123,7 @@ class Ranked(commands.Cog):
         self.default_rating = config.get('glicko_default_rating', 1500)
         self.default_rd = config.get('glicko_default_rd', 350)
         self.default_volatility = config.get('glicko_default_volatility', 0.06)
-        self.rating_period_length = config.get('glicko_rating_period_length', 3) # measured in days
+        self.rating_period_length = config.get('glicko_rating_period_length', 1) # measured in days
 
 
     @discord.commands.slash_command(name="setqueue", description="[Admin Command] Open or close the matchmaking queue.")
@@ -162,11 +169,11 @@ class Ranked(commands.Cog):
         
         winner_rank[0] = winner_new_rating
         winner_rank[1] = winner_new_rd
-        winner_rank[2] = winner_new_rating - winner_rating
+        winner_rank[3] = winner_new_rating - winner_rating
 
         loser_rank[0] = loser_new_rating
         loser_rank[1] = loser_new_rd
-        loser_rank[2] = loser_new_rating - loser_rating
+        loser_rank[3] = loser_new_rating - loser_rating
 
         # Rank thresholds are hard coded for now
         # Rankup logic
@@ -199,9 +206,9 @@ class Ranked(commands.Cog):
         if winner_new_role:
             self.logger.debug(f"Winning player ranked up, attempting to assign roles")
             highest_rating = self.get_players_highest_rating(winner['player_name'])
-            if highest_rating and highest_rating < winner_new_rating: # highest rating they have, role may be duplicate though
+            if highest_rating and highest_rating == winner_new_rating: # highest rating they have, role may be duplicate though
                 role = discord.utils.get(ctx.guild.roles, name=winner_new_role_name)
-                old_role = discord.utils.get(ctx.guild.roles, name=highest_rating)
+                old_role = discord.utils.get(ctx.guild.roles, name=winner_old_role_name)
                 member = ctx.guild.get_member(winner['discord_id'])
                 bot_member = ctx.guild.get_member(self.bot.user.id)
 
@@ -255,29 +262,29 @@ class Ranked(commands.Cog):
         role_removed = False
         discord_id = None
         res = self.database_cur.execute(f"SELECT glicko_rating, users.discord_id AS discord_id FROM users JOIN players ON players.discord_id = users.discord_id WHERE player_name='{player_name}' AND character='{char}'").fetchone()
-        if res: 
+        old_highest_rating = self.get_players_highest_rating(player_name)
+        if res:
             discord_id = res['discord_id']
-            if res['glicko_rating'] == self.get_players_highest_rating(player_name) or glicko_rating > self.get_players_highest_rating(player_name): # if this is the player's highest ranked character being updated, we need to remove the corresponding dan role
-                role = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(res['glicko_rating']))
-                member = ctx.guild.get_member(res['discord_id'])
-                bot_member = ctx.guild.get_member(self.bot.user.id)
-                if role and self.can_manage_role(bot_member, role):
-                    await member.remove_roles(role)
-                    role_removed = True
         else:
-            await ctx.respond(f"Database entry for player {player} on character {char} not found.")
+            await ctx.respond(f"Database entry for player {player_name} on character {char} not found.")
         
         update_glicko_rd = f"glicko_rd = {glicko_rd}, " if glicko_rd is not None else ""
         update_glicko_volatility = f"glicko_volatility = {glicko_volatility}, " if glicko_volatility is not None else ""
+        self.logger.debug(f"UPDATE players SET {update_glicko_rd}{update_glicko_volatility}glicko_rating = {glicko_rating} WHERE discord_id='{discord_id}' AND character='{char}'")
         self.database_cur.execute(f"UPDATE players SET {update_glicko_rd}{update_glicko_volatility}glicko_rating = {glicko_rating} WHERE discord_id='{discord_id}' AND character='{char}'")
         self.database_con.commit()
 
-        if role_removed and self.get_players_highest_rating(player_name) is not None:
-            role = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(self.get_players_highest_rating(player_name)))
+        if old_highest_rating != self.get_players_highest_rating(player_name) and self.get_role_name_by_rating(self.get_players_highest_rating(player_name)) != self.get_role_name_by_rating(old_highest_rating): 
+            discord_id = res['discord_id']
+            old_role = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(old_highest_rating))
+            new_role = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(self.get_players_highest_rating(player_name)))
             member = ctx.guild.get_member(res['discord_id'])
             bot_member = ctx.guild.get_member(self.bot.user.id)
-            if role and self.can_manage_role(bot_member, role):
-                await member.add_roles(role)
+            if old_role and self.can_manage_role(bot_member, old_role):
+                await member.remove_roles(old_role)
+            if new_role and self.can_manage_role(bot_member, new_role):
+                await member.remove_roles(new_role)
+
 
         await ctx.respond(f"{player_name}'s {char} rank updated to be {glicko_rating}{f"±{glicko_rd}" if glicko_rd is not None else ""}{f", volatility={glicko_volatility}" if glicko_volatility is not None else ""}.")
 
@@ -368,7 +375,7 @@ class Ranked(commands.Cog):
         # Insert the new player record
         line = (ctx.author.id, char1, self.default_rating, self.default_rd, self.default_volatility, int(time()))
         self.database_cur.execute(
-            "INSERT INTO players (discord_id, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_period) VALUES (?, ?, ?, ?, ?, ?)", 
+            "INSERT INTO players (discord_id, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_timestamp) VALUES (?, ?, ?, ?, ?, ?)", 
             line
         )
         self.database_con.commit()
@@ -576,7 +583,7 @@ class Ranked(commands.Cog):
             return
 
         #Check if valid character
-        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_period FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={discord_id} AND character='{char}'")
+        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_timestamp FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={discord_id} AND character='{char}'")
         daniel = res.fetchone()
         if daniel == None:
             await ctx.respond(f"You are not registered with that character")
@@ -631,7 +638,7 @@ class Ranked(commands.Cog):
         if self.queue_status == False:
             return
 
-        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_period FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={player['discord_id']} AND character='{player['character']}'")
+        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_timestamp FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={player['discord_id']} AND character='{player['character']}'")
         daniel = res.fetchone()
         if not db_player:
             return  # Exit if the player is not found in the database
@@ -661,7 +668,7 @@ class Ranked(commands.Cog):
         for player in self.matchmaking_queue:
             if player:
                 em.add_field(name=f"{player['nickname']} ({player['character']})", 
-                        value=f"{player['glicko_rating']}±{player['glicko_rd']} rating", 
+                        value=f"{player['glicko_rating']:.2f}±{player['glicko_rd']:.0f} rating", 
                         inline=False) 
         
         await ctx.send_response(embed=em)
@@ -783,7 +790,7 @@ class Ranked(commands.Cog):
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
         active_match_msg = None
         if channel:
-            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']}{self.emoji_mapping[daniel1['character']]}{p1_alert} ({daniel1['glicko_rating']}±{daniel1['glicko_rd']} rating) vs {daniel2['nickname']}'s {daniel2['character']}{self.emoji_mapping[daniel2['character']]}{p2_alert} ({daniel2['glicko_rating']}±{daniel2['glicko_rd']} rating).{" Room pw is `" + room_keyword[0] + "`." if room_keyword[0] else ""}")
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']}{self.emoji_mapping[daniel1['character']]}{p1_alert} ({daniel1['glicko_rating']:.2f}±{daniel1['glicko_rd']:.0f} rating) vs {daniel2['nickname']}'s {daniel2['character']}{self.emoji_mapping[daniel2['character']]}{p2_alert} ({daniel2['glicko_rating']:.2f}±{daniel2['glicko_rd']:.0f} rating).{" Room pw is `" + room_keyword[0] + "`." if room_keyword[0] else ""}")
         else:
             await ctx.respond(
                 f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
@@ -798,7 +805,7 @@ class Ranked(commands.Cog):
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} ({daniel1['glicko_rating']}±{daniel1['glicko_rd']} rating) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} ({daniel2['glicko_rating']}±{daniel2['glicko_rd']} rating) {self.emoji_mapping[daniel2['character']]}" +\
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} ({daniel1['glicko_rating']:.2f}±{daniel1['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} ({daniel2['glicko_rating']:.2f}±{daniel2['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel2['character']]}" +\
                 (f"\n\nThe room host will be {[id1, id2][room_keyword[1]]}, pw `{room_keyword[0]}`." if room_keyword[0] else f"\n\nNeither player has a default room password set, please coordinate the room in <#1433545145554309233>") +\
                 "\n\nAll sets are FT3, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
@@ -880,8 +887,8 @@ class Ranked(commands.Cog):
 
         await ctx.respond(
             f"### The match has been reported as <@{winner_id}>'s victory over <@{loser_id}>!\n"
-            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating}±{winner_old_rd} → **{winner_rank[0]}±{winner_rank[1]}** (+{winner_rank[3]} rating){rankup_message})\n"
-            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating}±{loser_old_rd} → **{loser_rank[0]}±{loser_rank[1]}** ({loser_rank[3]} rating){rankdown_message})"
+            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating:.2f}±{winner_old_rd:.0f} → **{winner_rank[0]:.2f}±{winner_rank[1]:.0f}** (+{winner_rank[3]:.2f} rating){rankup_message})\n"
+            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating:.2f}±{loser_old_rd:.0f} → **{loser_rank[0]:.2f}±{loser_rank[1]:.0f}** ({loser_rank[3]:.2f} rating){rankdown_message})"
         )
 
     #report match score for the queue
@@ -926,8 +933,8 @@ class Ranked(commands.Cog):
         if channel:
             await channel.send(
                 content=f"### The match has been reported as <@{winner_id}>'s victory over <@{loser_id}>!\n"
-                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating}±{winner_old_rd} → **{winner_rank[0]}±{winner_rank[1]}** (+{winner_rank[3]} rating){rankup_message})\n"
-                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating}±{loser_old_rd} → **{loser_rank[0]}±{loser_rank[1]}** ({loser_rank[3]} rating){rankdown_message})",
+                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating:.2f}±{winner_old_rd:.0f} → **{winner_rank[0]:.2f}±{winner_rank[1]:.0f}** (+{winner_rank[3]:.2f} rating){rankup_message})\n"
+                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating:.2f}±{loser_old_rd:.0f} → **{loser_rank[0]:.2f}±{loser_rank[1]:.0f}** ({loser_rank[3]:.2f} rating){rankdown_message})",
                 view=view
                 )
         else:
@@ -1179,7 +1186,7 @@ class Ranked(commands.Cog):
 
     def get_player(self, player_name, character):
         res = self.database_cur.execute(
-            "SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, dan, points FROM players JOIN users ON players.discord_id = users.discord_id WHERE player_name=? AND character=?", 
+            "SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility FROM players JOIN users ON players.discord_id = users.discord_id WHERE player_name=? AND character=?", 
             (player_name, character)
         )
         return res.fetchone()
@@ -1265,13 +1272,13 @@ class Ranked(commands.Cog):
             if row['character'] in char_winrates:
                 em.add_field(
                     name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
-                    value=f"{row['glicko_rating']}±{row['glicko_rd']} rating. {char_winrates[row['character']][2]:.2f}% Winrate ({char_winrates[row['character']][0]}W, {char_winrates[row['character']][1]}L)", 
+                    value=f"{row['glicko_rating']:.2f}±{row['glicko_rd']:.0f} rating. {char_winrates[row['character']][2]:.2f}% Winrate ({char_winrates[row['character']][0]}W, {char_winrates[row['character']][1]}L)", 
                     inline=False
                 )
             else:
                 em.add_field(
                     name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
-                    value=f"{row['glicko_rating']}±{row['glicko_rd']} rating. 0.00% Winrate (0W, 0L)", 
+                    value=f"{row['glicko_rating']:.2f}±{row['glicko_rd']:.0f} rating. 0.00% Winrate (0W, 0L)", 
                     inline=False
                 )
 
@@ -1550,10 +1557,10 @@ class Ranked(commands.Cog):
     # Step 3
     def glicko_v(self, mu: float, opponent_mus: list[float], opponent_phis: list[float]):
         ret_frac = 0
-        for i in range(len(opponent_ratings)):
+        for i in range(len(opponent_mus)):
             E_res = self.glicko_E(mu, opponent_mus[i], opponent_phis[i])
             g_res = self.glicko_g(opponent_phis[i])
-            ret += math.pow(g_res, 2) * E_res * (1 - E_res)
+            ret_frac += math.pow(g_res, 2) * E_res * (1 - E_res)
 
         return 1 / ret_frac
 
@@ -1566,7 +1573,7 @@ class Ranked(commands.Cog):
     # Step 4
     def glicko_delta(self, v: float, mu: float, opponent_mus: list[float], opponent_phis: list[float], game_outcomes: list[float]):
         ret = 0
-        for i in range(len(opponent_ratings)):
+        for i in range(len(opponent_mus)):
             E_res = self.glicko_E(mu, opponent_mus[i], opponent_phis[i])
             g_res = self.glicko_g(opponent_phis[i])
             ret += g_res * (game_outcomes[i] - E_res)
@@ -1578,20 +1585,22 @@ class Ranked(commands.Cog):
         convergence_epsilon = 0.000001
         a = math.log(math.pow(sigma, 2))
         big_a = a
-        big_b = math.log(math.pow(delta, 2) - math.pow(phi, 2) - v)
-        if math.pow(delta, 2) <= math.pow(phi, 2) + v:
+        # print(f"delta^2 is {math.pow(delta, 2)}, phi^2 is {math.pow(phi, 2)}, v is {v}, phi^2-v is {math.pow(phi, 2) - v}, total is {math.pow(delta, 2) - math.pow(phi, 2) - v}, bool is {math.pow(delta, 2) > math.pow(phi, 2) - v}")
+        if math.pow(delta, 2) > math.pow(phi, 2) + v:
+            big_b = math.log(math.pow(delta, 2) - math.pow(phi, 2) - v)
+        elif math.pow(delta, 2) <= math.pow(phi, 2) + v:
             k = 1
-            k_func_res = self.glicko_volatility_f_helper(a - (k * self.tau))
+            k_func_res = self.glicko_volatility_f_helper(a - (k * self.tau), a, phi, delta, v)
             while k_func_res < 0:
                 k += 1
-                k_func_res = self.glicko_volatility_f_helper(a - (k * self.tau))
+                k_func_res = self.glicko_volatility_f_helper(a - (k * self.tau), a, phi, delta, v)
             big_b = a - (k * self.tau)
         
-        big_a_func_res = self.glicko_volatility_f_helper(big_a)
-        big_b_func_res = self.glicko_volatility_f_helper(big_b)
+        big_a_func_res = self.glicko_volatility_f_helper(big_a, a, phi, delta, v)
+        big_b_func_res = self.glicko_volatility_f_helper(big_b, a, phi, delta, v)
         while abs(big_a - big_b) > convergence_epsilon:
             big_c = big_a + ((big_a - big_b) * big_a_func_res) / (big_b_func_res - big_a_func_res)
-            big_c_func_res = self.glicko_volatility_f_helper(big_c)
+            big_c_func_res = self.glicko_volatility_f_helper(big_c, a, phi, delta, v)
             if big_c_func_res * big_b_func_res <= 0:
                 big_a = big_b
                 big_a_func_res = big_b_func_res
@@ -1614,7 +1623,7 @@ class Ranked(commands.Cog):
     def glicko_new_rating_and_rd(self, phi_star: float, v: float, mu: float, opponent_mus: list[float], opponent_phis: list[float], game_outcomes: list[float]):
         phi_prime = 1 / math.sqrt((1/math.pow(phi_star, 2)) + (1 / v))
         mu_sum = 0
-        for i in range(len(opponent_ratings)):
+        for i in range(len(opponent_mus)):
             E_res = self.glicko_E(mu, opponent_mus[i], opponent_phis[i])
             g_res = self.glicko_g(opponent_phis[i])
             mu_sum += g_res * (game_outcomes[i] - E_res)
@@ -1638,6 +1647,29 @@ class Ranked(commands.Cog):
         
         return player_new_rating, player_new_rd, player_sigma_prime
 
+    def glicko_update_rating_no_games(self, player_rating: float, player_rd: float, player_volatility: float, elapsed_rating_periods: float):
+        player_mu, player_phi = self.convert_to_glicko_scale(player_rating, player_rd)
+        player_sigma = player_volatility
+        player_phi_star = self.glicko_new_rd_star(player_phi, player_sigma, elapsed_rating_periods)
+        player_new_rating, player_new_rd = self.convert_from_glicko_scale(player_mu, player_phi_star)
+
+        return player_new_rd
+
+    # Closes the current rating period, 
+    def glicko_close_rating_period(self, new_timestamp: int):
+        players_res = self.database_cur.execute(
+            "SELECT discord_id, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_timestamp FROM players"
+        ).fetchall()
+
+        for player in players_res:
+            player_elapsed_rating_period = (new_timestamp - int(player['last_rating_timestamp'])) / 86400
+            player_new_rd = self.glicko_update_rating_no_games(player['glicko_rating'], player['glicko_rd'], player['glicko_volatility'], player_elapsed_rating_period)
+            self.database_cur.execute(f"UPDATE players SET glicko_rd = {player_new_rd}, last_rating_timestamp = {new_timestamp} WHERE discord_id='{player['discord_id']}' and character='{player['character']}'")
+
+        self.database_con.commit()
+
+
+
     # 0 ~ 1099 -> Rookie (新人/Shinjin)
     # 1100 ~ 1249 -> Advanced (先進/Senshin) 
     # 1250 ~ 1399 -> Expert (玄人/Kurouto) 
@@ -1655,6 +1687,61 @@ class Ranked(commands.Cog):
         elif rating >= 1600:
             return "無敵"
 
+    # Starts a new glicko-2 rating period if there is not one already started. If one has ended, it will apply the RD increase to every player
+    def setup_rating_period(self):
+        res = self.database_cur.execute(f"SELECT timestamp FROM rating_period").fetchone()
+        if not res:
+            self.logger.debug(f"No previous rating period found, starting a new one")
+            self.database_cur.execute(
+                "INSERT INTO rating_period (timestamp) VALUES (?)", 
+                (int(time()),)
+            )
+        else:
+            time_since_last_period = int(res['timestamp'])
+            self.logger.debug(f"Previous rating period found (started {(time_since_last_period / 86400):.1f} days ago), attempting to update")
+            period_length = self.rating_period_length * 86400
+            periods_since_last_update = (int(time()) - time_since_last_period) / period_length
+            if periods_since_last_update >= 1:
+                new_timestamp = int(time())
+                self.glicko_close_rating_period(new_timestamp)
+                self.database_cur.execute(f"UPDATE rating_period SET timestamp = '{new_timestamp}'")
+
+    @discord.commands.slash_command(name="viewratingperiod", description="[Admin Command] View the start date of the current rating period, mainly debug")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def view_rating_period(self, ctx: discord.ApplicationContext):
+        res = self.database_cur.execute(f"SELECT timestamp FROM rating_period").fetchone()
+        if not res:
+            await ctx.respond(f"No rating period has started (this is probably an error, lmao)")
+            return
+        else:
+            await ctx.respond(f"The last rating period was started on <t:{res['timestamp']}:D>.")
+            return
+
+    @discord.commands.slash_command(name="updateratingperiod", description="[Admin Command] Set the start date of the current rating period, mainly debug. Uses Unix time.")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def update_rating_period(self, ctx: discord.ApplicationContext, new_timestamp: discord.Option(int, required=True)):
+        self.database_cur.execute(f"UPDATE rating_period SET timestamp = '{new_timestamp}'")
+        self.database_con.commit()
+        await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
+
+    
+    @discord.commands.slash_command(name="endratingperiod", description="[Admin Command] Forcefully end the current rating period")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def end_rating_period(self, ctx: discord.ApplicationContext):
+        new_timestamp = int(time())
+        self.glicko_close_rating_period(new_timestamp)
+        self.database_cur.execute(f"UPDATE rating_period SET timestamp = '{new_timestamp}'")
+        self.database_con.commit()
+        await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
+
+
+    @discord.commands.slash_command(name="setplayerlastplayedtime", description="[Admin Command] Debug function, sets the last time a player played")
+    @discord.commands.default_permissions(manage_guild=True)
+    async def set_player_last_played_time(self, ctx: discord.ApplicationContext, discord_id: discord.Option(str), new_timestamp: discord.Option(int)):
+        self.database_cur.execute(f"UPDATE players SET last_rating_timestamp = '{new_timestamp}' where discord_id = '{discord_id}'")
+        self.database_con.commit()
+        await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
+    
 
 
 
