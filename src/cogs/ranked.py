@@ -273,7 +273,7 @@ class Ranked(commands.Cog):
         self.logger.debug(f"UPDATE players SET {update_glicko_rd}{update_glicko_volatility}glicko_rating = {glicko_rating} WHERE discord_id='{discord_id}' AND character='{char}'")
         self.database_cur.execute(f"UPDATE players SET {update_glicko_rd}{update_glicko_volatility}glicko_rating = {glicko_rating} WHERE discord_id='{discord_id}' AND character='{char}'")
         self.database_con.commit()
-
+        self.logger.debug(f"Checking for role removal in setrank")
         if old_highest_rating != self.get_players_highest_rating(player_name) and self.get_role_name_by_rating(self.get_players_highest_rating(player_name)) != self.get_role_name_by_rating(old_highest_rating): 
             discord_id = res['discord_id']
             old_role = discord.utils.get(ctx.guild.roles, name=self.get_role_name_by_rating(old_highest_rating))
@@ -283,7 +283,7 @@ class Ranked(commands.Cog):
             if old_role and self.can_manage_role(bot_member, old_role):
                 await member.remove_roles(old_role)
             if new_role and self.can_manage_role(bot_member, new_role):
-                await member.remove_roles(new_role)
+                await member.add_roles(new_role)
 
 
         await ctx.respond(f"{player_name}'s {char} rank updated to be {glicko_rating}{f"±{glicko_rd}" if glicko_rd is not None else ""}{f", volatility={glicko_volatility}" if glicko_volatility is not None else ""}.")
