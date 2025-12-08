@@ -222,7 +222,7 @@ class Ranked(commands.Cog):
             if highest_rating and (highest_rating == loser_new_rating or loser_new_role_name == self.get_role_name_by_rating(highest_rating)): # have to deal with the case where new rating is less than higest rating, but still goes below the threshold of a rating bracket
                 role = discord.utils.get(ctx.guild.roles, name=loser_new_role_name)
                 old_role = discord.utils.get(ctx.guild.roles, name=loser_old_role_name)
-                member = ctx.guild.get_member(winner['discord_id'])
+                member = ctx.guild.get_member(loser['discord_id'])
                 bot_member = ctx.guild.get_member(self.bot.user.id)
 
                 if role and old_role and role != old_role and self.can_manage_role(bot_member, role):
