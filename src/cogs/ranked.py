@@ -1342,7 +1342,7 @@ class Ranked(commands.Cog):
     @discord.commands.slash_command(name="setsteamid", description="Assign a default room password to your profile")
     async def set_room_password(self, ctx: discord.ApplicationContext, pw: discord.Option(str, name="id", required=True)):
         if not pw.isalnum():
-            await ctx.respond(f"Invalid room password `{kw}`. Please assure the password is alphanumeric.")
+            await ctx.respond(f"Invalid room password `{pw}`. Please assure the password is alphanumeric.")
             return
         full_pw_url = "https://steamjoin.com/" + pw
         self.database_cur.execute("UPDATE users SET keyword = ? WHERE discord_id=?", (full_pw_url, ctx.author.id))
