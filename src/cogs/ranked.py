@@ -76,6 +76,7 @@ class Ranked(commands.Cog):
         self.in_queue = {}  # Format: discord_id@character: [in_queue, deque of last played discord_ids]
         self.in_match = {}  # Format: discord_id: in_match
         self.matchmaking_coro = None  # Task created with asyncio to run start_matchmaking after a set delay
+        self.rating_period_coro = None
 
         # Synchronization
         self.queue_lock = asyncio.Lock()
@@ -198,8 +199,8 @@ class Ranked(commands.Cog):
         self.logger.info(f"Loser : {loser['player_name']}, {loser_new_rating}±{loser_new_rd}")
 
         # Update database
-        self.database_cur.execute(f"UPDATE players SET glicko_rating = {winner_new_rating}, glicko_rd = {winner_new_rd}, glicko_volatility = {winner_new_volatility} WHERE discord_id='{winner['discord_id']}' AND character='{winner['character']}'")
-        self.database_cur.execute(f"UPDATE players SET glicko_rating = {loser_new_rating}, glicko_rd = {loser_new_rd}, glicko_volatility = {loser_new_volatility} WHERE discord_id='{loser['discord_id']}' AND character='{loser['character']}'")
+        self.database_cur.execute("UPDATE players SET glicko_rating = ?, glicko_rd = ?, glicko_volatility = ? WHERE discord_id=? AND character=?", (winner_new_rating, winner_new_rd, winner_new_volatility, winner['discord_id'], winner['character']))
+        self.database_cur.execute("UPDATE players SET glicko_rating = ?, glicko_rd = ?, glicko_volatility = ? WHERE discord_id=? AND character=?", (loser_new_rating, loser_new_rd, loser_new_volatility, loser['discord_id'], loser['character']))
         self.database_con.commit()
 
         # Update roles on rankup/down
@@ -239,7 +240,7 @@ class Ranked(commands.Cog):
         return [character for character in self.characters if character.lower().startswith(ctx.value.lower())]
 
     async def player_autocomplete(self, ctx: discord.AutocompleteContext):
-        res = self.database_cur.execute(f"SELECT player_name FROM users")
+        res = self.database_cur.execute("SELECT player_name FROM users")
         name_list=res.fetchall()
         names = set([name[0] for name in name_list])
         return [name for name in names if (name.lower()).startswith(ctx.value.lower())]
@@ -261,17 +262,18 @@ class Ranked(commands.Cog):
         # sync role stuff
         role_removed = False
         discord_id = None
-        res = self.database_cur.execute(f"SELECT glicko_rating, users.discord_id AS discord_id FROM users JOIN players ON players.discord_id = users.discord_id WHERE player_name='{player_name}' AND character='{char}'").fetchone()
+        res = self.database_cur.execute("SELECT glicko_rating, users.discord_id AS discord_id FROM users JOIN players ON players.discord_id = users.discord_id WHERE player_name=? AND character=?", (player_name, char)).fetchone()
         old_highest_rating = self.get_players_highest_rating(player_name)
         if res:
             discord_id = res['discord_id']
         else:
             await ctx.respond(f"Database entry for player {player_name} on character {char} not found.")
-        
-        update_glicko_rd = f"glicko_rd = {glicko_rd}, " if glicko_rd is not None else ""
-        update_glicko_volatility = f"glicko_volatility = {glicko_volatility}, " if glicko_volatility is not None else ""
-        self.logger.debug(f"UPDATE players SET {update_glicko_rd}{update_glicko_volatility}glicko_rating = {glicko_rating} WHERE discord_id='{discord_id}' AND character='{char}'")
-        self.database_cur.execute(f"UPDATE players SET {update_glicko_rd}{update_glicko_volatility}glicko_rating = {glicko_rating} WHERE discord_id='{discord_id}' AND character='{char}'")
+
+        self.database_cur.execute("UPDATE players SET glicko_rating = ? WHERE discord_id=? AND character=?", (glicko_rating, discord_id, char))
+        if glicko_rd is not None:
+            self.database_cur.execute("UPDATE players SET glicko_rd = ? WHERE discord_id=? AND character=?", (glicko_rd, discord_id, char))
+        if glicko_volatility is not None:
+            self.database_cur.execute("UPDATE players SET glicko_variance = ? WHERE discord_id=? AND character=?", (glicko_variance, discord_id, char))    
         self.database_con.commit()
         self.logger.debug(f"Checking for role removal in setrank")
         if old_highest_rating != self.get_players_highest_rating(player_name) and self.get_role_name_by_rating(self.get_players_highest_rating(player_name)) != self.get_role_name_by_rating(old_highest_rating): 
@@ -436,7 +438,7 @@ class Ranked(commands.Cog):
             await ctx.respond("You cannot unregister while in the queue. Please leave the queue first.")
             return
 
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
+        res = self.database_cur.execute("SELECT * FROM players WHERE discord_id=? AND character=?", (ctx.author.id, char1))
         daniel = res.fetchone()
 
         if daniel == None:
@@ -444,7 +446,7 @@ class Ranked(commands.Cog):
             return
 
         self.logger.info(f"Removing {ctx.author.name} {ctx.author.id} {char1} from db")
-        self.database_cur.execute(f"DELETE FROM players WHERE discord_id={ctx.author.id} AND character='{char1}'")
+        self.database_cur.execute("DELETE FROM players WHERE discord_id=? AND character=?", (ctx.author.id, char1))
         self.database_con.commit()
 
         # Get roles to remove from participant, if they have them.
@@ -464,7 +466,7 @@ class Ranked(commands.Cog):
         if role:
             role_list.append(role)
 
-        res = self.database_cur.execute(f"SELECT * FROM players WHERE discord_id=?", (ctx.author.id,)).fetchone()
+        res = self.database_cur.execute("SELECT * FROM players WHERE discord_id=?", (ctx.author.id,)).fetchone()
         if res is None:
             participant_role = discord.utils.get(ctx.guild.roles, name="Ranked Bot Participant")
             if participant_role:
@@ -583,7 +585,7 @@ class Ranked(commands.Cog):
             return
 
         #Check if valid character
-        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_timestamp FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={discord_id} AND character='{char}'")
+        res = self.database_cur.execute("SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_timestamp FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id=? AND character=?", (discord_id, char))
         daniel = res.fetchone()
         if daniel == None:
             await ctx.respond(f"You are not registered with that character")
@@ -595,7 +597,7 @@ class Ranked(commands.Cog):
         player_nickname = re.subn(r"(?P<char>[\*\-\_\~])", r"\\\g<char>", player_nickname)[0]
         self.logger.debug(f"player nickname post regex is {player_nickname}")
         if player_nickname != daniel['nickname']:
-            self.database_cur.execute(f"UPDATE users SET nickname = '{player_nickname}' WHERE discord_id='{ctx.author.id}'")
+            self.database_cur.execute("UPDATE users SET nickname = ? WHERE discord_id=?", (player_nickname, ctx.author.id))
 
         daniel = DanisenRow(daniel)
         daniel['requeue'] = rejoin_queue
@@ -638,8 +640,8 @@ class Ranked(commands.Cog):
         if self.queue_status == False:
             return
 
-        res = self.database_cur.execute(f"SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_timestamp FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id={player['discord_id']} AND character='{player['character']}'")
-        daniel = res.fetchone()
+        res = self.database_cur.execute("SELECT users.discord_id AS discord_id, player_name, nickname, keyword, character, glicko_rating, glicko_rd, glicko_volatility, last_rating_timestamp FROM players JOIN users ON players.discord_id = users.discord_id WHERE users.discord_id=? AND character=?", (player['discord_id'], player['character']))
+        db_player = res.fetchone()
         if not db_player:
             return  # Exit if the player is not found in the database
 
@@ -1247,18 +1249,18 @@ class Ranked(commands.Cog):
             inline=False
         )
 
-        if user_res["keyword"]:
-            em.add_field(
-                name=f"Room Password:",
-                value=f"`{user_res["keyword"]}`",
-                inline=True
-            )
-        else:
-            em.add_field(
-                name=f"Room Password:",
-                value=f"None (set one with /setroompassword)",
-                inline=True
-            )
+        # if user_res["keyword"]:
+        #     em.add_field(
+        #         name=f"Room Password:",
+        #         value=f"`{user_res["keyword"]}`",
+        #         inline=True
+        #     )
+        # else:
+        #     em.add_field(
+        #         name=f"Room Password:",
+        #         value=f"None (set one with /setroompassword)",
+        #         inline=True
+        #     )
 
         em.add_field(
             name=f"Characters:",
@@ -1287,7 +1289,7 @@ class Ranked(commands.Cog):
     # Helper function
     # Returns the highest Dan rank on any character registered by this player. If the player has no characters registered, return None
     def get_players_highest_rating(self, player_name: str):
-        res = self.database_cur.execute(f"SELECT MAX(glicko_rating) as max_rating FROM players JOIN users ON players.discord_id = users.discord_id WHERE player_name='{player_name}'").fetchone()
+        res = self.database_cur.execute("SELECT MAX(glicko_rating) as max_rating FROM players JOIN users ON players.discord_id = users.discord_id WHERE player_name=?", (player_name,)).fetchone()
         if res:
             return res['max_rating']
         else:
@@ -1334,20 +1336,20 @@ class Ranked(commands.Cog):
 
         self.logger.debug(f"Not restarting timer, no players in queue")
 
-    @discord.commands.slash_command(name="setroompassword", description="Assign a default room password to your profile")
-    async def set_room_password(self, ctx: discord.ApplicationContext, pw: discord.Option(str, name="password", required=True)):
-        if not pw.isalnum() or len(pw) > 8:
-            await ctx.respond(f"Invalid room password `{kw}`. Please assure the password is alphanumeric, is 8 or less characters, and has no spaces (so that it works in GBVSR).")
-            return
-        self.database_cur.execute(f"UPDATE users SET keyword = '{pw}' WHERE discord_id='{ctx.author.id}'")
-        self.database_con.commit()
-        await ctx.respond(f"Default room password updated.")
+    # @discord.commands.slash_command(name="setroompassword", description="Assign a default room password to your profile")
+    # async def set_room_password(self, ctx: discord.ApplicationContext, pw: discord.Option(str, name="password", required=True)):
+    #     if not pw.isalnum() or len(pw) > 8:
+    #         await ctx.respond(f"Invalid room password `{kw}`. Please assure the password is alphanumeric, is 8 or less characters, and has no spaces (so that it works in GBVSR).")
+    #         return
+    #     self.database_cur.execute("UPDATE users SET keyword = ? WHERE discord_id=?", (pw, ctx.author.id))
+    #     self.database_con.commit()
+    #     await ctx.respond(f"Default room password updated.")
 
-    @discord.commands.slash_command(name="removeroompassword", description="Remove the room password from your profile, if one is assigned")
-    async def remove_room_password(self, ctx: discord.ApplicationContext):
-        self.database_cur.execute(f"UPDATE users SET keyword = NULL WHERE discord_id='{ctx.author.id}'")
-        self.database_con.commit()
-        await ctx.respond(f"Default room password removed.")
+    # @discord.commands.slash_command(name="removeroompassword", description="Remove the room password from your profile, if one is assigned")
+    # async def remove_room_password(self, ctx: discord.ApplicationContext):
+    #     self.database_cur.execute("UPDATE users SET keyword = NULL WHERE discord_id=?", (ctx.author.id,))
+    #     self.database_con.commit()
+    #     await ctx.respond(f"Default room password removed.")
 
     async def check_rankup_potential(self, player1, player2):
         return [0,0]
@@ -1396,11 +1398,11 @@ class Ranked(commands.Cog):
         winning_sets = 0
         losing_sets = 0
 
-        res = self.database_cur.execute(f"SELECT COUNT(*) AS wins FROM matches WHERE winner_discord_id={discord_id}").fetchone()
+        res = self.database_cur.execute("SELECT COUNT(*) AS wins FROM matches WHERE winner_discord_id=?", (discord_id,)).fetchone()
         if res:
             winning_sets = res['wins']
 
-        res = self.database_cur.execute(f"SELECT COUNT(*) AS losses FROM matches WHERE loser_discord_id={discord_id}").fetchone()
+        res = self.database_cur.execute("SELECT COUNT(*) AS losses FROM matches WHERE loser_discord_id=?", (discord_id,)).fetchone()
         if res:
             losing_sets = res['losses']
 
@@ -1411,14 +1413,14 @@ class Ranked(commands.Cog):
 
     def get_all_char_winrate_by_id(self, discord_id: int):
         ret = {} # in the form {character: [wins, losses, winrate]}
-        res = self.database_cur.execute(f"SELECT winner_character AS character, COUNT(*) AS wins FROM matches WHERE winner_discord_id={discord_id} GROUP BY winner_character").fetchall()
+        res = self.database_cur.execute("SELECT winner_character AS character, COUNT(*) AS wins FROM matches WHERE winner_discord_id=? GROUP BY winner_character", (discord_id,)).fetchall()
         for char_res in res:
             if char_res['character'] not in ret:
                 ret[char_res['character']] = [char_res['wins'], 0, 100.0]
             else:
                 ret[char_res['character']][0] = char_res['wins']
 
-        res = self.database_cur.execute(f"SELECT loser_character AS character, COUNT(*) AS losses FROM matches WHERE loser_discord_id={discord_id} GROUP BY loser_character").fetchall()
+        res = self.database_cur.execute("SELECT loser_character AS character, COUNT(*) AS losses FROM matches WHERE loser_discord_id=? GROUP BY loser_character", (discord_id,)).fetchall()
         for char_res in res:
             if char_res['character'] not in ret:
                 ret[char_res['character']] = [0, char_res['losses'], 0.0]
@@ -1438,7 +1440,7 @@ class Ranked(commands.Cog):
 
     def get_total_matches_by_id(self, discord_id: int):
         total_sets = 0
-        res = self.database_cur.execute(f"SELECT COUNT(*) AS sets FROM matches WHERE winner_discord_id={discord_id} OR loser_discord_id={discord_id}").fetchone()
+        res = self.database_cur.execute("SELECT COUNT(*) AS sets FROM matches WHERE winner_discord_id=? OR loser_discord_id=?", (discord_id, discord_id)).fetchone()
         if res:
             total_sets = res['sets']
         
@@ -1454,24 +1456,24 @@ class Ranked(commands.Cog):
         p2_id = 0
 
         self.logger.debug(f"Attempting to find match to remove between {player1}" and {player2})
-        res = self.database_cur.execute(f"SELECT discord_id FROM users WHERE player_name='{player1}'").fetchone()
+        res = self.database_cur.execute("SELECT discord_id FROM users WHERE player_name=?", (player1,)).fetchone()
         if res:
             p1_id = res['discord_id']
         else:
             await ctx.respond(f"Player 1 ({player1}) is not registered to the Danisen database.")
             return
 
-        res = self.database_cur.execute(f"SELECT discord_id FROM users WHERE player_name='{player2}'").fetchone()
+        res = self.database_cur.execute("SELECT discord_id FROM users WHERE player_name=?", (player2,)).fetchone()
         if res:
             p2_id = res['discord_id']
         else:
             await ctx.respond(f"Player 2 ({player2}) is not registered to the Danisen database.")
             return
 
-        res = self.database_cur.execute(f"SELECT MAX(id) AS id FROM matches WHERE (winner_discord_id={p1_id} AND loser_discord_id={p2_id}) OR (winner_discord_id={p2_id} AND loser_discord_id={p1_id})").fetchone()
+        res = self.database_cur.execute("SELECT MAX(id) AS id FROM matches WHERE (winner_discord_id=? AND loser_discord_id=?) OR (winner_discord_id=? AND loser_discord_id=?)", (p1_id, p2_id, p2_id, p1_id)).fetchone()
         if res and res['id']:
             self.logger.debug(f"Match between players found, removing from db")
-            self.database_cur.execute(f"DELETE FROM matches WHERE id={res['id']}")
+            self.database_cur.execute("DELETE FROM matches WHERE id=?", (res['id'],))
             self.database_con.commit()
             await ctx.respond(f"Latest match successfully removed (id = {res['id']})")
             return
@@ -1664,7 +1666,7 @@ class Ranked(commands.Cog):
         for player in players_res:
             player_elapsed_rating_period = (new_timestamp - int(player['last_rating_timestamp'])) / 86400
             player_new_rd = self.glicko_update_rating_no_games(player['glicko_rating'], player['glicko_rd'], player['glicko_volatility'], player_elapsed_rating_period)
-            self.database_cur.execute(f"UPDATE players SET glicko_rd = {player_new_rd}, last_rating_timestamp = {new_timestamp} WHERE discord_id='{player['discord_id']}' and character='{player['character']}'")
+            self.database_cur.execute("UPDATE players SET glicko_rd = ?, last_rating_timestamp = ? WHERE discord_id=? and character=?", (player_new_rd, new_timestamp, player['discord_id'], player['character']))
 
         self.database_con.commit()
 
@@ -1689,7 +1691,7 @@ class Ranked(commands.Cog):
 
     # Starts a new glicko-2 rating period if there is not one already started. If one has ended, it will apply the RD increase to every player
     def setup_rating_period(self):
-        res = self.database_cur.execute(f"SELECT timestamp FROM rating_period").fetchone()
+        res = self.database_cur.execute("SELECT timestamp FROM rating_period").fetchone()
         if not res:
             self.logger.debug(f"No previous rating period found, starting a new one")
             self.database_cur.execute(
@@ -1704,7 +1706,31 @@ class Ranked(commands.Cog):
             if periods_since_last_update >= 1:
                 new_timestamp = int(time())
                 self.glicko_close_rating_period(new_timestamp)
-                self.database_cur.execute(f"UPDATE rating_period SET timestamp = '{new_timestamp}'")
+                self.database_cur.execute("UPDATE rating_period SET timestamp = ?", (new_timestamp,))
+
+        if self.rating_period_coro is None:
+            res = self.database_cur.execute("SELECT timestamp FROM rating_period").fetchone()
+            delay = self.rating_period_length * 86400
+            if res:
+                delay -= (int(time()) - int(res['timestamp']))
+
+            self.rating_period_coro = asyncio.create_task(self.rating_period_timer(delay))
+            self.logger.debug(f"Matchmaking timer started with {delay} seconds")
+
+
+    async def rating_period_timer(self, delay):
+        await asyncio.sleep(delay)
+        self.logger.info(f"Closing current rating period and updating")
+        new_timestamp = int(time())
+        self.glicko_close_rating_period(new_timestamp)
+        self.database_cur.execute("UPDATE rating_period SET timestamp = ?", (new_timestamp,))
+
+        while True:
+            await asyncio.sleep(self.rating_period_length * 86400)
+            self.logger.info(f"Closing current rating period and updating")
+            new_timestamp = int(time())
+            self.glicko_close_rating_period(new_timestamp)
+            self.database_cur.execute("UPDATE rating_period SET timestamp = ?", (new_timestamp,))
 
     @discord.commands.slash_command(name="viewratingperiod", description="[Admin Command] View the start date of the current rating period, mainly debug")
     @discord.commands.default_permissions(manage_guild=True)
@@ -1717,30 +1743,30 @@ class Ranked(commands.Cog):
             await ctx.respond(f"The last rating period was started on <t:{res['timestamp']}:D>.")
             return
 
-    @discord.commands.slash_command(name="updateratingperiod", description="[Admin Command] Set the start date of the current rating period, mainly debug. Uses Unix time.")
-    @discord.commands.default_permissions(manage_guild=True)
-    async def update_rating_period(self, ctx: discord.ApplicationContext, new_timestamp: discord.Option(int, required=True)):
-        self.database_cur.execute(f"UPDATE rating_period SET timestamp = '{new_timestamp}'")
-        self.database_con.commit()
-        await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
+    # @discord.commands.slash_command(name="updateratingperiod", description="[Admin Command] Set the start date of the current rating period, mainly debug. Uses Unix time.")
+    # @discord.commands.default_permissions(manage_guild=True)
+    # async def update_rating_period(self, ctx: discord.ApplicationContext, new_timestamp: discord.Option(int, required=True)):
+    #     self.database_cur.execute("UPDATE rating_period SET timestamp = ?", (new_timestamp,))
+    #     self.database_con.commit()
+    #     await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
 
     
-    @discord.commands.slash_command(name="endratingperiod", description="[Admin Command] Forcefully end the current rating period")
-    @discord.commands.default_permissions(manage_guild=True)
-    async def end_rating_period(self, ctx: discord.ApplicationContext):
-        new_timestamp = int(time())
-        self.glicko_close_rating_period(new_timestamp)
-        self.database_cur.execute(f"UPDATE rating_period SET timestamp = '{new_timestamp}'")
-        self.database_con.commit()
-        await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
+    # @discord.commands.slash_command(name="endratingperiod", description="[Admin Command] Forcefully end the current rating period")
+    # @discord.commands.default_permissions(manage_guild=True)
+    # async def end_rating_period(self, ctx: discord.ApplicationContext):
+    #     new_timestamp = int(time())
+    #     self.glicko_close_rating_period(new_timestamp)
+    #     self.database_cur.execute("UPDATE rating_period SET timestamp = ?", (new_timestamp,))
+    #     self.database_con.commit()
+    #     await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
 
 
-    @discord.commands.slash_command(name="setplayerlastplayedtime", description="[Admin Command] Debug function, sets the last time a player played")
-    @discord.commands.default_permissions(manage_guild=True)
-    async def set_player_last_played_time(self, ctx: discord.ApplicationContext, discord_id: discord.Option(str), new_timestamp: discord.Option(int)):
-        self.database_cur.execute(f"UPDATE players SET last_rating_timestamp = '{new_timestamp}' where discord_id = '{discord_id}'")
-        self.database_con.commit()
-        await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
+    # @discord.commands.slash_command(name="setplayerlastplayedtime", description="[Admin Command] Debug function, sets the last time a player played")
+    # @discord.commands.default_permissions(manage_guild=True)
+    # async def set_player_last_played_time(self, ctx: discord.ApplicationContext, discord_id: discord.Option(str), new_timestamp: discord.Option(int)):
+    #     self.database_cur.execute("UPDATE players SET last_rating_timestamp = ? where discord_id = ?", (new_timestamp, discord_id))
+    #     self.database_con.commit()
+    #     await ctx.respond(f"Rating period start time updated to <t:{new_timestamp}:D>.")
     
 
 
