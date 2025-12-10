@@ -169,7 +169,7 @@ class Ranked(commands.Cog):
         loser_new_rating, loser_new_rd, loser_new_volatility = self.glicko_update_rating(loser_rating, loser_rd, loser_volatility, [winner_rating], [winner_rd], [0], p2_elapsed_rating_periods)
         
         # TODO: add a config option to disable this
-        loser_new_rating = min(loser_new_rating, self.default_rating)
+        loser_new_rating = max(loser_new_rating, self.default_rating)
 
         winner_rank[0] = winner_new_rating
         winner_rank[1] = winner_new_rd
