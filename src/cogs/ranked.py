@@ -168,6 +168,9 @@ class Ranked(commands.Cog):
         winner_new_rating, winner_new_rd, winner_new_volatility = self.glicko_update_rating(winner_rating, winner_rd, winner_volatility, [loser_rating], [loser_rd], [1], p1_elapsed_rating_periods)
         loser_new_rating, loser_new_rd, loser_new_volatility = self.glicko_update_rating(loser_rating, loser_rd, loser_volatility, [winner_rating], [winner_rd], [0], p2_elapsed_rating_periods)
         
+        # TODO: add a config option to disable this
+        loser_new_rating = min(loser_new_rating, self.default_rating)
+
         winner_rank[0] = winner_new_rating
         winner_rank[1] = winner_new_rd
         winner_rank[3] = winner_new_rating - winner_rating
@@ -792,7 +795,7 @@ class Ranked(commands.Cog):
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
         active_match_msg = None
         if channel:
-            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']}{self.emoji_mapping[daniel1['character']]}{p1_alert} ({daniel1['glicko_rating']:.2f}±{daniel1['glicko_rd']:.0f} rating) vs {daniel2['nickname']}'s {daniel2['character']}{self.emoji_mapping[daniel2['character']]}{p2_alert} ({daniel2['glicko_rating']:.2f}±{daniel2['glicko_rd']:.0f} rating).{" Room pw is `" + room_keyword[0] + "`." if room_keyword[0] else ""}")
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']}{self.emoji_mapping[daniel1['character']]}{p1_alert} ({daniel1['glicko_rating']:.2f}±{daniel1['glicko_rd']:.0f} rating) vs {daniel2['nickname']}'s {daniel2['character']}{self.emoji_mapping[daniel2['character']]}{p2_alert} ({daniel2['glicko_rating']:.2f}±{daniel2['glicko_rd']:.0f} rating).{" Room link is " + room_keyword[0] + "." if room_keyword[0] else ""}")
         else:
             await ctx.respond(
                 f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
@@ -808,7 +811,7 @@ class Ranked(commands.Cog):
         if channel:
             webhook_msg = await channel.send(
                 content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} ({daniel1['glicko_rating']:.2f}±{daniel1['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} ({daniel2['glicko_rating']:.2f}±{daniel2['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel2['character']]}" +\
-                (f"\n\nThe room host will be {[id1, id2][room_keyword[1]]}, pw `{room_keyword[0]}`." if room_keyword[0] else f"\n\nNeither player has a default room password set, please coordinate the room in <#1433545145554309233>") +\
+                (f"\n\nThe room host will be {[id1, id2][room_keyword[1]]}, url {room_keyword[0]} " if room_keyword[0] else f"\n\nNeither player has a Steam ID set, please coordinate the room a text channel.") +\
                 "\n\nAll sets are FT3, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
             )
@@ -1249,18 +1252,18 @@ class Ranked(commands.Cog):
             inline=False
         )
 
-        # if user_res["keyword"]:
-        #     em.add_field(
-        #         name=f"Room Password:",
-        #         value=f"`{user_res["keyword"]}`",
-        #         inline=True
-        #     )
-        # else:
-        #     em.add_field(
-        #         name=f"Room Password:",
-        #         value=f"None (set one with /setroompassword)",
-        #         inline=True
-        #     )
+        if user_res["keyword"]:
+            em.add_field(
+                name=f"Room Password:",
+                value=f"`{user_res["keyword"]}`",
+                inline=True
+            )
+        else:
+            em.add_field(
+                name=f"Room Link:",
+                value=f"None (set one with /setsteamid)",
+                inline=True
+            )
 
         em.add_field(
             name=f"Characters:",
@@ -1336,20 +1339,21 @@ class Ranked(commands.Cog):
 
         self.logger.debug(f"Not restarting timer, no players in queue")
 
-    # @discord.commands.slash_command(name="setroompassword", description="Assign a default room password to your profile")
-    # async def set_room_password(self, ctx: discord.ApplicationContext, pw: discord.Option(str, name="password", required=True)):
-    #     if not pw.isalnum() or len(pw) > 8:
-    #         await ctx.respond(f"Invalid room password `{kw}`. Please assure the password is alphanumeric, is 8 or less characters, and has no spaces (so that it works in GBVSR).")
-    #         return
-    #     self.database_cur.execute("UPDATE users SET keyword = ? WHERE discord_id=?", (pw, ctx.author.id))
-    #     self.database_con.commit()
-    #     await ctx.respond(f"Default room password updated.")
+    @discord.commands.slash_command(name="setsteamid", description="Assign a default room password to your profile")
+    async def set_room_password(self, ctx: discord.ApplicationContext, pw: discord.Option(str, name="id", required=True)):
+        if not pw.isalnum():
+            await ctx.respond(f"Invalid room password `{kw}`. Please assure the password is alphanumeric.")
+            return
+        full_pw_url = "https://steamjoin.com/" + pw
+        self.database_cur.execute("UPDATE users SET keyword = ? WHERE discord_id=?", (full_pw_url, ctx.author.id))
+        self.database_con.commit()
+        await ctx.respond(f"Default room password updated.")
 
-    # @discord.commands.slash_command(name="removeroompassword", description="Remove the room password from your profile, if one is assigned")
-    # async def remove_room_password(self, ctx: discord.ApplicationContext):
-    #     self.database_cur.execute("UPDATE users SET keyword = NULL WHERE discord_id=?", (ctx.author.id,))
-    #     self.database_con.commit()
-    #     await ctx.respond(f"Default room password removed.")
+    @discord.commands.slash_command(name="removesteamid", description="Remove the room password from your profile, if one is assigned")
+    async def remove_room_password(self, ctx: discord.ApplicationContext):
+        self.database_cur.execute("UPDATE users SET keyword = NULL WHERE discord_id=?", (ctx.author.id,))
+        self.database_con.commit()
+        await ctx.respond(f"Default room password removed.")
 
     async def check_rankup_potential(self, player1, player2):
         return [0,0]
