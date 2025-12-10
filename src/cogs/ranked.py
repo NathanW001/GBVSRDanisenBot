@@ -1535,7 +1535,8 @@ class Ranked(commands.Cog):
                                                   limit: discord.Option(int)):
         self.recent_opponents_limit = limit
         for player in self.in_queue.keys():
-            self.in_queue[player][1].maxlen = limit
+            new_deque = deque(list(self.in_queue[player][1]), maxlen=limit)
+            self.in_queue[player][1] = new_deque
 
         await ctx.respond(f"recent_opponents_limit updated to {limit}!")
         return
