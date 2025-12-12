@@ -112,7 +112,9 @@ class Ranked(commands.Cog):
         self.character_aliases = config.get('character_aliases', {})
         for char in self.characters: # Each character must exist in emoji mapping
             if char not in self.emoji_mapping:
+                self.logger.debug(f"Emoji for character {char} not found")
                 self.emoji_mapping[char] = ""
+        
 
         # MATCHMAKING QUEUE CONFIG
         self.queue_status = config.get('queue_status', True)
@@ -810,7 +812,7 @@ class Ranked(commands.Cog):
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} ({daniel1['glicko_rating']:.0f}±{daniel1['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} ({daniel2['glicko_rating']:.f}±{daniel2['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel2['character']]}" +\
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} ({daniel1['glicko_rating']:.0f}±{daniel1['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} ({daniel2['glicko_rating']:.0f}±{daniel2['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel2['character']]}" +\
                 (f"\n\nThe room host will be {[id1, id2][room_keyword[1]]}, url {room_keyword[0]} " if room_keyword[0] else f"\n\nNeither player has a Steam ID set, please coordinate the room a text channel.") +\
                 "\n\nAll sets are FT3, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
@@ -1706,7 +1708,7 @@ class Ranked(commands.Cog):
             )
         else:
             time_since_last_period = int(res['timestamp'])
-            self.logger.debug(f"Previous rating period found (started {(time_since_last_period / 86400):.1f} days ago), attempting to update")
+            self.logger.debug(f"Previous rating period found (started {((int(time()) - time_since_last_period) / 86400):.1f} days ago), attempting to update")
             period_length = self.rating_period_length * 86400
             periods_since_last_update = (int(time()) - time_since_last_period) / period_length
             if periods_since_last_update >= 1:
