@@ -1048,7 +1048,7 @@ class Ranked(commands.Cog):
 
         leaderboard_pages = self.create_paginated_embeds("Top Characters", daniels, MAX_FIELDS_PER_EMBED)
         paginator = pages.Paginator(pages=leaderboard_pages)
-        await paginator.respond(ctx.interaction, ephemeral=True)
+        await paginator.respond(ctx.interaction, ephemeral=False)
 
     @discord.commands.slash_command(name="updatemaxmatches", description="[Admin Command] Update max matches for the queue system")
     @discord.commands.default_permissions(manage_messages=True)
