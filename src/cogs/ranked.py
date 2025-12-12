@@ -629,7 +629,7 @@ class Ranked(commands.Cog):
             queue_add_success = True
         
         if queue_add_success:
-            await ctx.respond(f"You've been added to the matchmaking queue with {char}. Current queue length: {len(self.matchmaking_queue)}")
+            await ctx.respond(f"You've been added to the matchmaking queue with {char}. Current queue length: {len([True for player in self.matchmaking_queue if player])}")
             await self.begin_matchmaking_timer(ctx.interaction, 30)
         else:
             await ctx.respond(f"An error with the queue mutex or code within has occured, please contact and admin.")
@@ -666,14 +666,14 @@ class Ranked(commands.Cog):
     @discord.commands.slash_command(name="viewqueue", description="view players in the queue")
     async def view_queue(self, ctx : discord.ApplicationContext):
         em = discord.Embed(
-            title="Current Danisen Queue",
+            title="Current Queue",
             color=discord.Color.blurple())
 
         self.logger.debug(f"current queue is {self.matchmaking_queue}")
         for player in self.matchmaking_queue:
             if player:
                 em.add_field(name=f"{player['nickname']} ({player['character']})", 
-                        value=f"{player['glicko_rating']:.2f}±{player['glicko_rd']:.0f} rating", 
+                        value=f"{player['glicko_rating']:.0f}±{player['glicko_rd']:.0f} rating", 
                         inline=False) 
         
         await ctx.send_response(embed=em)
@@ -795,7 +795,7 @@ class Ranked(commands.Cog):
         channel = self.bot.get_channel(self.ONGOING_MATCHES_CHANNEL_ID)
         active_match_msg = None
         if channel:
-            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']}{self.emoji_mapping[daniel1['character']]}{p1_alert} ({daniel1['glicko_rating']:.2f}±{daniel1['glicko_rd']:.0f} rating) vs {daniel2['nickname']}'s {daniel2['character']}{self.emoji_mapping[daniel2['character']]}{p2_alert} ({daniel2['glicko_rating']:.2f}±{daniel2['glicko_rd']:.0f} rating).{" Room link is " + room_keyword[0] + "." if room_keyword[0] else ""}")
+            active_match_msg = await channel.send(f"[{datetime.now().time().replace(microsecond=0)}] {daniel1['nickname']}'s {daniel1['character']}{self.emoji_mapping[daniel1['character']]}{p1_alert} ({daniel1['glicko_rating']:.0f}±{daniel1['glicko_rd']:.0f} rating) vs {daniel2['nickname']}'s {daniel2['character']}{self.emoji_mapping[daniel2['character']]}{p2_alert} ({daniel2['glicko_rating']:.0f}±{daniel2['glicko_rd']:.0f} rating).{" Room link is " + room_keyword[0] + "." if room_keyword[0] else ""}")
         else:
             await ctx.respond(
                 f"Could not find channel to add to current ongoing matches (could be an issue with channel id {self.ONGOING_MATCHES_CHANNEL_ID} or bot permissions)"
@@ -810,7 +810,7 @@ class Ranked(commands.Cog):
         channel = self.bot.get_channel(self.ACTIVE_MATCHES_CHANNEL_ID)
         if channel:
             webhook_msg = await channel.send(
-                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} ({daniel1['glicko_rating']:.2f}±{daniel1['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} ({daniel2['glicko_rating']:.2f}±{daniel2['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel2['character']]}" +\
+                content=f"\n## New Match Created\n### Player 1: {id1} {daniel1['character']} ({daniel1['glicko_rating']:.0f}±{daniel1['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel1['character']]}\n\n### Player 2: {id2} {daniel2['character']} ({daniel2['glicko_rating']:.f}±{daniel2['glicko_rd']:.0f} rating) {self.emoji_mapping[daniel2['character']]}" +\
                 (f"\n\nThe room host will be {[id1, id2][room_keyword[1]]}, url {room_keyword[0]} " if room_keyword[0] else f"\n\nNeither player has a Steam ID set, please coordinate the room a text channel.") +\
                 "\n\nAll sets are FT3, do not swap characters off of the character you matched as.\nPlease report the set result in the drop down menu after the set! (only players in the match and admins can report it)",
                 view=view,
@@ -892,8 +892,8 @@ class Ranked(commands.Cog):
 
         await ctx.respond(
             f"### The match has been reported as <@{winner_id}>'s victory over <@{loser_id}>!\n"
-            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating:.2f}±{winner_old_rd:.0f} → **{winner_rank[0]:.2f}±{winner_rank[1]:.0f}** (+{winner_rank[3]:.2f} rating){rankup_message})\n"
-            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating:.2f}±{loser_old_rd:.0f} → **{loser_rank[0]:.2f}±{loser_rank[1]:.0f}** ({loser_rank[3]:.2f} rating){rankdown_message})"
+            f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating:.0f}±{winner_old_rd:.0f} → **{winner_rank[0]:.0f}±{winner_rank[1]:.0f}** (+{winner_rank[3]:.0f} rating){rankup_message})\n"
+            f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating:.0f}±{loser_old_rd:.0f} → **{loser_rank[0]:.0f}±{loser_rank[1]:.0f}** ({loser_rank[3]:.0f} rating){rankdown_message})"
         )
 
     #report match score for the queue
@@ -938,8 +938,8 @@ class Ranked(commands.Cog):
         if channel:
             await channel.send(
                 content=f"### The match has been reported as <@{winner_id}>'s victory over <@{loser_id}>!\n"
-                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating:.2f}±{winner_old_rd:.0f} → **{winner_rank[0]:.2f}±{winner_rank[1]:.0f}** (+{winner_rank[3]:.2f} rating){rankup_message})\n"
-                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating:.2f}±{loser_old_rd:.0f} → **{loser_rank[0]:.2f}±{loser_rank[1]:.0f}** ({loser_rank[3]:.2f} rating){rankdown_message})",
+                f"{winner}'s {winner_char} {self.emoji_mapping[winner_char]}: {winner_old_rating:.0f}±{winner_old_rd:.0f} → **{winner_rank[0]:.0f}±{winner_rank[1]:.0f}** (+{winner_rank[3]:.0f} rating){rankup_message})\n"
+                f"{loser}'s {loser_char} {self.emoji_mapping[loser_char]}: {loser_old_rating:.0f}±{loser_old_rd:.0f} → **{loser_rank[0]:.0f}±{loser_rank[1]:.0f}** ({loser_rank[3]:.0f} rating){rankdown_message})",
                 view=view
                 )
         else:
@@ -1014,7 +1014,7 @@ class Ranked(commands.Cog):
         return page_list
 
     # Refactor danisen_stats to use the helper function
-    @discord.commands.slash_command(name="danisenstats", description="See various statistics about the danisen")
+    @discord.commands.slash_command(name="serverstats", description="See various statistics about the danisen")
     async def danisen_stats(self, ctx: discord.ApplicationContext):
         danisen_info = self.database_cur.execute(
             "SELECT accounts, characters, total_games FROM (SELECT COUNT(*) AS accounts FROM users) AS AccountsTable JOIN (SELECT COUNT(*) AS characters FROM players) AS CharactersTable JOIN (SELECT COUNT(*) AS total_games FROM matches) AS MatchesTable"
@@ -1022,15 +1022,16 @@ class Ranked(commands.Cog):
         char_info = self.database_cur.execute(
             "SELECT CharCountTable.character AS name, character_count, wins, losses, ROUND(100.0 * wins / (wins + losses), 1) AS winrate FROM (SELECT character, COUNT(*) AS character_count FROM players GROUP BY character) AS CharCountTable JOIN (SELECT winner_character AS character, COUNT(*) AS wins FROM matches GROUP BY winner_character) AS CharWinTable ON CharCountTable.character = CharWinTable.character JOIN (SELECT loser_character AS character, COUNT(*) AS losses FROM matches GROUP BY loser_character) AS CharLossTable ON CharCountTable.character = CharLossTable.character GROUP BY CharCountTable.character ORDER BY character_count DESC"
         ).fetchall()
-        dan_count = self.database_cur.execute(
-            "SELECT dan AS name, COUNT(*) AS value FROM players GROUP BY dan ORDER BY dan"
-        ).fetchall()
+        # dan_count = self.database_cur.execute(
+        #     "SELECT dan AS name, COUNT(*) AS value FROM players GROUP BY dan ORDER BY dan"
+        # ).fetchall()
 
         # reformat dan count as their names are just numbers
-        dan_count = [{"name": f"Dan {dan['name']}", "value": dan['value']} for dan in dan_count]
+        # dan_count = [{"name": f"Dan {dan['name']}", "value": dan['value']} for dan in dan_count]
         danisen_pages = self.create_danisen_stat_embed("General Danisen Stats", danisen_info, MAX_FIELDS_PER_EMBED)
         char_pages = self.create_paginated_character_embeds("Character Usage Stats", char_info, MAX_FIELDS_PER_EMBED)
-        dan_pages = self.create_paginated_dan_embeds("Dan Stats", dan_count, MAX_FIELDS_PER_EMBED, colour=discord.Color.blurple())
+        # dan_pages = self.create_paginated_dan_embeds("Dan Stats", dan_count, MAX_FIELDS_PER_EMBED, colour=discord.Color.blurple())
+        dan_pages = [] # TEMP
 
         paginator = pages.Paginator(pages=danisen_pages + char_pages + dan_pages)
         await paginator.respond(ctx.interaction, ephemeral=False)
@@ -1041,11 +1042,11 @@ class Ranked(commands.Cog):
     @discord.commands.slash_command(description="See the top players")
     async def leaderboard(self, ctx: discord.ApplicationContext):
         daniels = self.database_cur.execute(
-            "SELECT nickname || '''s ' || character AS name, glicko_rating || '±' || glicko_rd || ' rating' AS value "
-            "FROM players JOIN users ON players.discord_id = users.discord_id ORDER BY dan DESC, points DESC"
+            "SELECT nickname || '''s ' || character AS name, ROUND(glicko_rating, 0) || '±' || ROUND(glicko_rd, 0) || ' rating' AS value "
+            "FROM players JOIN users ON players.discord_id = users.discord_id ORDER BY glicko_rating DESC, glicko_rd ASC"
         ).fetchall()
 
-        leaderboard_pages = self.create_paginated_embeds("Top Danisen Characters", daniels, MAX_FIELDS_PER_EMBED)
+        leaderboard_pages = self.create_paginated_embeds("Top Characters", daniels, MAX_FIELDS_PER_EMBED)
         paginator = pages.Paginator(pages=leaderboard_pages)
         await paginator.respond(ctx.interaction, ephemeral=True)
 
@@ -1277,13 +1278,13 @@ class Ranked(commands.Cog):
             if row['character'] in char_winrates:
                 em.add_field(
                     name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
-                    value=f"{row['glicko_rating']:.2f}±{row['glicko_rd']:.0f} rating. {char_winrates[row['character']][2]:.2f}% Winrate ({char_winrates[row['character']][0]}W, {char_winrates[row['character']][1]}L)", 
+                    value=f"{row['glicko_rating']:.0f}±{row['glicko_rd']:.0f} rating. {char_winrates[row['character']][2]:.0f}% Winrate ({char_winrates[row['character']][0]}W, {char_winrates[row['character']][1]}L)", 
                     inline=False
                 )
             else:
                 em.add_field(
                     name=f"{row["character"]} {self.emoji_mapping[row['character']]}", 
-                    value=f"{row['glicko_rating']:.2f}±{row['glicko_rd']:.0f} rating. 0.00% Winrate (0W, 0L)", 
+                    value=f"{row['glicko_rating']:.0f}±{row['glicko_rd']:.0f} rating. 0.00% Winrate (0W, 0L)", 
                     inline=False
                 )
 
