@@ -1042,7 +1042,7 @@ class Ranked(commands.Cog):
     @discord.commands.slash_command(description="See the top players")
     async def leaderboard(self, ctx: discord.ApplicationContext):
         daniels = self.database_cur.execute(
-            "SELECT nickname || '''s ' || character AS name, ROUND(glicko_rating, 0) || '±' || ROUND(glicko_rd, 0) || ' rating' AS value "
+            "SELECT nickname || '''s ' || character AS name, CAST(ROUND(glicko_rating, 0) AS INT) || '±' || CAST(ROUND(glicko_rd, 0) AS INT) || ' rating' AS value "
             "FROM players JOIN users ON players.discord_id = users.discord_id ORDER BY glicko_rating DESC, glicko_rd ASC"
         ).fetchall()
 
