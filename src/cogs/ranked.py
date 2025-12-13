@@ -108,6 +108,7 @@ class Ranked(commands.Cog):
 
         # CHARACTER SETTINGS CONFIG
         self.characters = config.get('characters', [])
+        self.character_limit = config.get('character_limit', 3)
         self.emoji_mapping = config.get('emoji_mapping', {char: "" for char in self.characters})
         self.character_aliases = config.get('character_aliases', {})
         for char in self.characters: # Each character must exist in emoji mapping
@@ -358,8 +359,8 @@ class Ranked(commands.Cog):
         regged_chars = 0
         if res:
             regged_chars = res["char_count"]
-            if res["char_count"] >= 3:
-                await ctx.respond(f"You are already registered with 3 characters. Please unregister one of your characters before registering a new character.")
+            if res["char_count"] >= self.character_limit:
+                await ctx.respond(f"You are already registered with {self.character_limit} characters. Please unregister one of your characters before registering a new character.")
                 return        
 
         # If user is not in the users table, insert them into that table first
@@ -415,12 +416,12 @@ class Ranked(commands.Cog):
         if regged_chars > 0:
             await ctx.respond(
                 f"You are now registered as {player_name}{" " + player_nickname if player_nickname else ""} with {char1}!\n"
-                f"You have registered {regged_chars+1}/3 characters. Have fun!"
+                f"You have registered {regged_chars+1}/{self.character_limit} characters. Have fun!"
             )
         else:
             await ctx.respond(
                 f"You are now registered as {player_name}{" " + player_nickname if player_nickname else ""} with {char1}!\n"
-                "If you wish to add more characters, you can register with up to 3 different characters!\n\n"
+                f"If you wish to add more characters, you can register with up to {self.character_limit} different characters!\n\n"
                 "Welcome to the BBCF ranked ladder!"
             )
 

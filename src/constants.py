@@ -23,6 +23,7 @@ DEFAULT_CONFIG = {
     "queue_status": True,
     "max_active_matches": 5,
     "characters": [],
+    "character_limit": 3,
     "emoji_mapping": {},
     "character_aliases": {},
     "glicko_tau": 0.3,
